@@ -1,254 +1,260 @@
 // src/services/auth.service.ts
-import { 
-  createUserWithEmailAndPassword, 
-  signInWithEmailAndPassword, 
-  signInWithPopup, 
-  GoogleAuthProvider,
-  signOut,
-  updateProfile,
-  sendEmailVerification
-} from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/config';
-import type { AppUser, UserRole } from '@/types/user';
-
-const googleProvider = new GoogleAuthProvider();
+import { getSupabase } from '@/lib/supabase/client';
+import { UserRole, AppUser, InfluencerUser, BrandUser } from '@/types/user';
 
 export class AuthService {
+  // Hardcoded admin credentials
+  static readonly ADMIN_EMAIL = 'admin@pulsehub.com';
+  static readonly ADMIN_PASSWORD = 'Admin@123';
+
   // Register with email/password
-  static async registerWithEmail(
-    email: string, 
-    password: string, 
-    displayName: string,
-    role: UserRole,
-    companyName?: string
-  ) {
-    try {
-      // Create user in Firebase Auth
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
+ 
 
-      // Update display name
-      await updateProfile(user, { displayName });
+static async registerWithEmail(
+  email: string,
+  password: string,
+  displayName: string,
+  role: string,
+  companyName?: string
+) {
+  try {
+    const supabase = getSupabase();
 
-      // Send email verification
-      await sendEmailVerification(user);
+    const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          display_name: displayName,
+          role: role,
+        },
+      },
+    });
 
-      // Create user data object
-      const userData: any = {
-        uid: user.uid,
-        email: user.email,
-        displayName,
-        role,
-        photoURL: user.photoURL || '',
-        emailVerified: user.emailVerified,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+    if (signUpError) throw new Error(signUpError.message);
 
-      // Add role-specific fields
-      if (role === 'brand') {
-        userData.companyName = companyName || displayName;
-        userData.industry = 'General';
-        userData.companySize = '1-10';
-      } else if (role === 'influencer') {
-        userData.profileId = user.uid;
-        userData.isVerified = false;
-        userData.trustScore = 50; // Starting score
-        userData.niche = ['Lifestyle'];
-        userData.location = 'Unknown';
-      }
+    if (!authData.user) {
+      return { success: false, error: 'Failed to create user' };
+    }
 
-      // Save to Firestore
-      await setDoc(doc(db, 'users', user.uid), userData);
+    const userId = authData.user.id;
 
-      // Create role-specific profile
-      if (role === 'influencer') {
-        await setDoc(doc(db, 'influencer_profiles', user.uid), {
-          userId: user.uid,
-          displayName,
-          email: user.email,
-          bio: 'New influencer on PulseHub',
-          niche: ['Lifestyle'],
-          location: 'Unknown',
-          followers: {},
-          engagementRate: 0,
-          trustScore: 50,
-          isVerified: false,
-          connectedAccounts: {},
-          analytics: {
-            totalReach: 0,
-            totalEngagement: 0,
-            averageLikes: 0,
-            averageComments: 0,
-            postsThisMonth: 0,
-          },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      } else if (role === 'brand') {
-        await setDoc(doc(db, 'brand_profiles', user.uid), {
-          userId: user.uid,
-          companyName: companyName || displayName,
-          email: user.email,
-          industry: 'General',
-          companySize: '1-10',
-          socialAccounts: {},
-          campaigns: {
-            active: 0,
-            completed: 0,
-            totalBudget: 0,
-          },
-          analytics: {
-            totalReach: 0,
-            engagementRate: 0,
-            postsThisMonth: 0,
-            newFollowers: 0,
-          },
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        });
-      }
+    // Insert into users table
+    const userData = {
+      id: userId,
+      email: email,
+      display_name: displayName,
+      role: role,
+      photo_url: null,
+      email_verified: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
 
-      return { success: true, user: userData };
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Registration failed' 
+    await supabase.from('users').insert([userData]);
+
+    // Create role-specific profile
+    if (role === 'influencer') {
+      await supabase.from('influencer_profiles').insert([{
+        user_id: userId,
+        display_name: displayName,
+        email: email,
+        bio: 'New influencer on PulseHub',
+        niche: ['Lifestyle'],
+        location: 'Unknown',
+        followers_count: 0,
+        engagement_rate: 0,
+        trust_score: 50,
+        is_verified: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }]);
+    } else if (role === 'brand') {
+      await supabase.from('brand_profiles').insert([{
+        user_id: userId,
+        company_name: companyName || displayName,
+        email: email,
+        industry: 'General',
+        company_size: '1-10',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }]);
+    }
+
+    return { success: true, user: authData.user, userId };
+  } catch (error: any) {
+    console.error('Registration error:', error);
+    return { success: false, error: error.message || 'Registration failed' };
+  }
+}
+
+  //  Update loginWithEmail method
+
+// In loginWithEmail method, add console logs:
+static async loginWithEmail(email: string, password: string) {
+  console.log('🔐 Login attempt:', email);
+  
+  try {
+    // Check for hardcoded admin
+    if (email === this.ADMIN_EMAIL && password === this.ADMIN_PASSWORD) {
+      console.log('✅ Admin login success');
+      return {
+        success: true,
+        user: { id: 'admin-001', email: this.ADMIN_EMAIL },
+        redirectPath: '/admin/admin-001',
       };
     }
-  }
 
-  // Login with email/password
-  static async loginWithEmail(email: string, password: string) {
-    try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      return { success: true, user: userCredential.user };
-    } catch (error: any) {
-      console.error('Login error:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Login failed' 
-      };
+    const supabase = getSupabase();
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+    if (error) {
+      console.log('❌ Supabase login error:', error.message);
+      throw new Error(error.message);
     }
+
+    console.log('✅ Supabase login success, user ID:', data.user.id);
+
+    // Get user role
+    const role = await this.getUserRole(data.user.id);
+    console.log('📋 User role:', role);
+    
+    let redirectPath = `/influencer/${data.user.id}`;
+    if (role === 'brand') redirectPath = `/brand/${data.user.id}`;
+    if (role === 'admin') redirectPath = '/admin/admin-001';
+    
+    console.log('🔄 Redirecting to:', redirectPath);
+    
+    return { success: true, user: data.user, redirectPath };
+  } catch (error: any) {
+    console.error('Login error:', error);
+    return { success: false, error: error.message };
   }
+}
 
   // Login with Google
-  static async loginWithGoogle(role: UserRole) {
+  static async loginWithGoogle(role?: UserRole) {
     try {
-      const userCredential = await signInWithPopup(auth, googleProvider);
-      const user = userCredential.user;
+      const supabase = getSupabase();
 
-      // Check if user exists in Firestore
-      const userDoc = await getDoc(doc(db, 'users', user.uid));
-      
-      if (!userDoc.exists()) {
-        // Create new user document
-        const userData: any = {
-          uid: user.uid,
-          email: user.email,
-          displayName: user.displayName || 'User',
-          photoURL: user.photoURL || '',
-          role,
-          emailVerified: user.emailVerified,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        };
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: `${window.location.origin}/dashboard`,
+          queryParams: role ? { role } : undefined,
+        },
+      });
 
-        // Add role-specific fields
-        if (role === 'brand') {
-          userData.companyName = user.displayName || 'My Company';
-          userData.industry = 'General';
-          userData.companySize = '1-10';
-        } else if (role === 'influencer') {
-          userData.profileId = user.uid;
-          userData.isVerified = false;
-          userData.trustScore = 50;
-          userData.niche = ['Lifestyle'];
-          userData.location = 'Unknown';
-        }
+      if (error) throw new Error(error.message);
 
-        await setDoc(doc(db, 'users', user.uid), userData);
-
-        // Create role-specific profile
-        if (role === 'influencer') {
-          await setDoc(doc(db, 'influencer_profiles', user.uid), {
-            userId: user.uid,
-            displayName: user.displayName || 'Influencer',
-            email: user.email,
-            photoURL: user.photoURL,
-            bio: 'New influencer on PulseHub',
-            niche: ['Lifestyle'],
-            location: 'Unknown',
-            followers: {},
-            engagementRate: 0,
-            trustScore: 50,
-            isVerified: false,
-            connectedAccounts: {},
-            analytics: {
-              totalReach: 0,
-              totalEngagement: 0,
-              averageLikes: 0,
-              averageComments: 0,
-              postsThisMonth: 0,
-            },
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        } else if (role === 'brand') {
-          await setDoc(doc(db, 'brand_profiles', user.uid), {
-            userId: user.uid,
-            companyName: user.displayName || 'My Company',
-            email: user.email,
-            industry: 'General',
-            companySize: '1-10',
-            socialAccounts: {},
-            campaigns: {
-              active: 0,
-              completed: 0,
-              totalBudget: 0,
-            },
-            analytics: {
-              totalReach: 0,
-              engagementRate: 0,
-              postsThisMonth: 0,
-              newFollowers: 0,
-            },
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        }
-      }
-
-      return { success: true, user };
+      return { success: true, user: data.user };
     } catch (error: any) {
       console.error('Google login error:', error);
-      return { 
-        success: false, 
-        error: error.message || 'Google login failed' 
-      };
+      return { success: false, error: error.message || 'Google login failed' };
+    }
+  }
+
+  // Get current user role (simplified for now)
+  static async getUserRole(userId: string): Promise<UserRole | null> {
+    try {
+      // Check if admin
+      if (userId === 'admin-001') {
+        return 'admin';
+      }
+
+      const supabase = getSupabase();
+      const { data, error } = await supabase
+        .from('users')
+        .select('role')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        // If table doesn't exist, return default role based on user metadata
+        const { data: { user } } = await supabase.auth.getUser();
+        const metadataRole = user?.user_metadata?.role;
+        if (metadataRole === 'brand' || metadataRole === 'influencer') {
+          return metadataRole;
+        }
+        return 'influencer'; // default
+      }
+
+      return data?.role as UserRole;
+    } catch (error) {
+      console.error('Error getting user role:', error);
+      return 'influencer'; // default fallback
+    }
+  }
+
+  // Get user data from Supabase (simplified)
+  static async getUserData(userId: string): Promise<AppUser | null> {
+    try {
+      // Check for admin
+      if (userId === 'admin-001') {
+        return {
+          uid: 'admin-001',
+          email: this.ADMIN_EMAIL,
+          displayName: 'Admin User',
+          role: 'admin',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          emailVerified: true,
+        } as unknown as AppUser;
+      }
+
+      const supabase = getSupabase();
+      
+      // Try to get from users table
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', userId)
+        .single();
+
+      if (error || !data) {
+        // Fallback: get from auth metadata
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          return {
+            uid: user.id,
+            email: user.email!,
+            displayName: user.user_metadata?.display_name || 'User',
+            photoURL: user.user_metadata?.avatar_url,
+            role: user.user_metadata?.role || 'influencer',
+            createdAt: new Date(user.created_at),
+            updatedAt: new Date(user.updated_at),
+            emailVerified: user.email_confirmed_at ? true : false,
+          } as AppUser;
+        }
+        return null;
+      }
+
+      // Convert to AppUser format
+      const userData: AppUser = {
+        uid: data.id,
+        email: data.email,
+        displayName: data.display_name,
+        photoURL: data.photo_url,
+        role: data.role,
+        createdAt: new Date(data.created_at),
+        updatedAt: new Date(data.updated_at),
+        emailVerified: data.email_verified,
+      } as AppUser;
+
+      return userData;
+    } catch (error) {
+      console.error('Error getting user data:', error);
+      return null;
     }
   }
 
   // Logout
   static async logout() {
     try {
-      await signOut(auth);
+      const supabase = getSupabase();
+      const { error } = await supabase.auth.signOut();
+      if (error) throw new Error(error.message);
       return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  }
-
-  // Get current user data from Firestore
-  static async getCurrentUser(uid: string) {
-    try {
-      const userDoc = await getDoc(doc(db, 'users', uid));
-      if (userDoc.exists()) {
-        return { success: true, data: userDoc.data() as AppUser };
-      }
-      return { success: false, error: 'User not found' };
     } catch (error: any) {
       return { success: false, error: error.message };
     }
