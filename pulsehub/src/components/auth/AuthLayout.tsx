@@ -22,7 +22,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               <Sparkles className="w-4 h-4" />
               <span className="text-sm font-medium">14-day free trial · No credit card</span>
             </div>
-            <h1 className="text-4xl font-bold leading-tight mb-6">
+            <h1 className="text-4xl font-bold leading-tight mb-6 text-white">
               Plan, publish, and get paid — all from one place.
             </h1>
 
@@ -48,8 +48,18 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       </div>
 
       {/* Right panel — form */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 bg-primary-50">
-        <div className="w-full max-w-md">{children}</div>
+      <div className="w-full lg:w-1/2 flex flex-col bg-primary-50">
+        <div className="flex-1 flex items-center justify-center p-6">
+          <div className="w-full max-w-lg">{children}</div>
+        </div>
+        <div className="px-6 pb-6">
+          <div className="flex items-center justify-center gap-6 text-xs text-gray-500">
+            <Link href="/privacy" className="hover:text-primary-700 transition">Privacy</Link>
+            <Link href="/terms" className="hover:text-primary-700 transition">Terms</Link>
+            <Link href="/tools" className="hover:text-primary-700 transition">Free Tools</Link>
+            <Link href="/academy" className="hover:text-primary-700 transition">Academy</Link>
+          </div>
+        </div>
       </div>
     </div>
   );

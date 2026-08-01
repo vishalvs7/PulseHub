@@ -4,7 +4,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { 
+import {
   LayoutDashboard,
   BarChart3,
   Megaphone,
@@ -21,6 +21,9 @@ import {
   MessageSquare,
   Wrench,
   GraduationCap,
+  Sparkles,
+  Menu,
+  X,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -46,6 +49,7 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
     return [
       { name: 'Dashboard', href: base, icon: LayoutDashboard },
       { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
+      { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
       { name: 'Campaigns', href: `${base}/campaigns`, icon: Megaphone },
       { name: 'Posting', href: `${base}/posting`, icon: Send },
       { name: 'Inbox', href: `${base}/inbox`, icon: Inbox },
@@ -60,6 +64,7 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
   return [
     { name: 'Dashboard', href: base, icon: LayoutDashboard },
     { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
+    { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
     { name: 'Connections', href: `${base}/connections`, icon: Users },
     { name: 'Profile', href: `${base}/profile`, icon: UserCircle },
     { name: 'Inbox', href: `${base}/inbox`, icon: Inbox },
@@ -71,21 +76,26 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
   ];
 }
 
-export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps) {
-  const [collapsed, setCollapsed] = useState(false);
+function SidebarContent({
+  type,
+  uid,
+  userData,
+  onLogout,
+  collapsed,
+  onToggleCollapse,
+  onNavigate,
+}: SidebarProps & { collapsed: boolean; onToggleCollapse: () => void; onNavigate?: () => void }) {
   const pathname = usePathname();
-  
   const items = buildItems(type, uid);
 
   return (
-    <div className={`h-full bg-white border-r border-secondary-200 transition-all duration-300 ${
+    <div className={`flex flex-col h-full bg-white border-r border-secondary-200 transition-all duration-300 ${
       collapsed ? 'w-20' : 'w-64'
     }`}>
       {/* Logo */}
       <div className="p-6 border-b border-secondary-100">
         <div className="flex items-center justify-between">
-          <Link href={`/${type}/${uid}`} 
-                className="flex items-center space-x-3">
+          <Link href={`/${type}/${uid}`} className="flex items-center space-x-3">
             <div className={`w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-700 rounded-lg flex items-center justify-center ${
               collapsed ? 'mx-auto' : ''
             }`}>
@@ -102,8 +112,8 @@ export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps)
           </Link>
           {!collapsed && (
             <button
-              onClick={() => setCollapsed(!collapsed)}
-              className="p-1 hover:bg-secondary-100 rounded-lg"
+              onClick={onToggleCollapse}
+              className="p-1 hover:bg-secondary-100 rounded-lg hidden lg:block"
             >
               <ChevronLeft className="w-5 h-5 text-secondary-600" />
             </button>
@@ -111,8 +121,8 @@ export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps)
         </div>
         {collapsed && (
           <button
-            onClick={() => setCollapsed(!collapsed)}
-            className="w-full mt-4 p-1 hover:bg-secondary-100 rounded-lg flex justify-center"
+            onClick={onToggleCollapse}
+            className="w-full mt-4 p-1 hover:bg-secondary-100 rounded-lg flex justify-center hidden lg:block"
           >
             <ChevronRight className="w-5 h-5 text-secondary-600" />
           </button>
@@ -120,15 +130,15 @@ export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps)
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {items.map((item) => {
           const Icon = item.icon;
           const isActive = pathname === item.href;
-          
           return (
             <Link
               key={item.name}
               href={item.href}
+              onClick={onNavigate}
               className={`flex items-center ${
                 collapsed ? 'justify-center px-3' : 'space-x-3 px-4'
               } py-3 rounded-lg transition-all ${
@@ -137,8 +147,8 @@ export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps)
                   : 'text-secondary-700 hover:bg-secondary-50'
               }`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? 'text-primary-600' : 'text-secondary-400'}`} />
-              {!collapsed && <span className="font-medium">{item.name}</span>}
+              <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-primary-600' : 'text-secondary-400'}`} />
+              {!collapsed && <span className="font-medium truncate">{item.name}</span>}
             </Link>
           );
         })}
@@ -155,7 +165,7 @@ export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps)
                 className="w-10 h-10 rounded-full"
               />
             ) : (
-              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+              <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center shrink-0">
                 <span className="text-primary-700 font-bold">
                   {userData.name?.[0] || 'U'}
                 </span>
@@ -179,7 +189,7 @@ export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps)
           )}
         </div>
       )}
-      
+
       {collapsed && userData && (
         <div className="p-4 border-t border-secondary-100 flex justify-center">
           <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
@@ -190,5 +200,62 @@ export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps)
         </div>
       )}
     </div>
+  );
+}
+
+export default function Sidebar(props: SidebarProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  return (
+    <>
+      {/* Mobile top bar */}
+      <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-white border-b border-secondary-200 flex items-center justify-between px-4 py-3">
+        <Link href={`/${props.type}/${props.uid}`} className="flex items-center space-x-2">
+          <div className="w-8 h-8 bg-gradient-to-r from-primary-600 to-primary-700 rounded-lg flex items-center justify-center">
+            <Zap className="w-5 h-5 text-white" />
+          </div>
+          <span className="text-lg font-bold text-secondary-900">PulseHub</span>
+        </Link>
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          className="p-2 text-secondary-700 hover:bg-secondary-100 rounded-lg"
+          aria-label="Toggle sidebar"
+        >
+          {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+        </button>
+      </div>
+
+      {/* Mobile overlay */}
+      {mobileOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Mobile slide-in drawer */}
+      <div
+        className={`lg:hidden fixed inset-y-0 left-0 z-50 transition-transform duration-300 transform ${
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
+        <SidebarContent
+          {...props}
+          collapsed={false}
+          onToggleCollapse={() => {}}
+          onNavigate={() => setMobileOpen(false)}
+        />
+      </div>
+
+      {/* Desktop sidebar */}
+      <div className="hidden lg:block h-full">
+        <SidebarContent
+          {...props}
+          collapsed={collapsed}
+          onToggleCollapse={() => setCollapsed(!collapsed)}
+        />
+      </div>
+    </>
   );
 }

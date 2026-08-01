@@ -1,3 +1,4 @@
+import type { ReachTier } from './influencer';
 import type { UserRole } from './user';
 
 export type Tables = {
@@ -35,6 +36,37 @@ export type Tables = {
     engagement_rate: number;
     trust_score: number;
     is_verified: boolean;
+    base_rate_min?: number | null;
+    base_rate_max?: number | null;
+    base_rate_currency: string;
+    reach_tier: ReachTier;
+    created_at: string;
+    updated_at: string;
+  };
+  posts: {
+    id: string;
+    user_id: string;
+    platform: string;
+    platform_post_id?: string | null;
+    content: string;
+    media_urls: string[];
+    scheduled_for?: string | null;
+    published_at?: string | null;
+    status: string;
+    created_at: string;
+    updated_at: string;
+  };
+  post_targets: {
+    id: string;
+    post_id: string;
+    platform: string;
+    content: string;
+    media_urls: string[];
+    status: string;
+    platform_post_id?: string | null;
+    scheduled_for?: string | null;
+    published_at?: string | null;
+    error?: string | null;
     created_at: string;
     updated_at: string;
   };

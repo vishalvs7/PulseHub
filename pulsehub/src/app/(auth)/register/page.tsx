@@ -100,28 +100,26 @@ function RegisterForm() {
           {/* Role Selection */}
           <div className="mb-8">
             <label className="block text-sm font-medium text-gray-700 mb-3">I am a...</label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 p-1 bg-gray-100 rounded-lg">
               <button
                 type="button"
                 onClick={() => setRole('influencer')}
-                className={`p-4 border-2 rounded-lg flex flex-col items-center justify-center transition-all ${
-                  role === 'influencer' ? 'border-primary-600 bg-primary-50' : 'border-gray-300 hover:border-gray-400'
+                className={`py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                  role === 'influencer' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'
                 }`}
               >
-                <Users className={`w-6 h-6 mb-2 ${role === 'influencer' ? 'text-primary-600' : 'text-gray-500'}`} />
-                <span className={`font-medium ${role === 'influencer' ? 'text-primary-700' : 'text-gray-700'}`}>Influencer</span>
-                <span className="text-xs text-gray-500 mt-1">14-day trial</span>
+                <Users className="w-4 h-4" />
+                Influencer
               </button>
               <button
                 type="button"
                 onClick={() => setRole('brand')}
-                className={`p-4 border-2 rounded-lg flex flex-col items-center justify-center transition-all ${
-                  role === 'brand' ? 'border-primary-600 bg-primary-50' : 'border-gray-300 hover:border-gray-400'
+                className={`py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2 transition-all ${
+                  role === 'brand' ? 'bg-white text-primary-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'
                 }`}
               >
-                <Building className={`w-6 h-6 mb-2 ${role === 'brand' ? 'text-primary-600' : 'text-gray-500'}`} />
-                <span className={`font-medium ${role === 'brand' ? 'text-primary-700' : 'text-gray-700'}`}>Brand</span>
-                <span className="text-xs text-gray-500 mt-1">14-day trial</span>
+                <Building className="w-4 h-4" />
+                Brand
               </button>
             </div>
           </div>

@@ -18,7 +18,7 @@ export default function BrandLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen bg-secondary-50">
+    <div className="min-h-screen bg-secondary-50 lg:h-screen lg:flex">
       <Sidebar
         type="brand"
         uid={uid}
@@ -29,7 +29,7 @@ export default function BrandLayout({ children }: { children: ReactNode }) {
         }}
         onLogout={handleLogout}
       />
-      <main className="flex-1 overflow-y-auto p-8">
+      <main className="flex-1 lg:overflow-y-auto px-4 sm:px-6 lg:p-8 pt-20 lg:pt-8 pb-10">
         {children}
       </main>
     </div>

@@ -7,10 +7,13 @@ import { Button } from '@/components/ui/Button';
 import { 
   Plus, Calendar, Image, Video, Send,
   Instagram, Twitter, Linkedin, Clock,
-  CheckCircle, XCircle, Search
+  CheckCircle, XCircle, Search, Sparkles
 } from 'lucide-react';
 import { PostingService } from '@/services/social/posting.service';
 import PrePublishChecklist from '@/components/academy/PrePublishChecklist';
+import AIAssistant from '@/components/ai/AIAssistant';
+import PlatformCaptionTuner from '@/components/ai/PlatformCaptionTuner';
+import type { PlatformKey } from '@/lib/ai/platforms';
 
 interface ScheduledPost {
   id: string;
@@ -38,6 +41,16 @@ export default function BrandPostingPage() {
   const [error, setError] = useState('');
   const [showChecklist, setShowChecklist] = useState(false);
   const [pendingAction, setPendingAction] = useState<'now' | 'schedule' | null>(null);
+  const [showAI, setShowAI] = useState(false);
+  const [aiMode, setAiMode] = useState<'single' | 'platforms'>('single');
+
+  const applyPlatformCaption = (platform: PlatformKey, caption: string) => {
+    setPostContent(caption);
+    if (!selectedPlatforms.includes(platform)) {
+      setSelectedPlatforms([platform]);
+    }
+    setShowAI(false);
+  };
 
   const platforms = [
     { id: 'instagram', name: 'Instagram', icon: Instagram, color: 'text-accent-500' },
@@ -123,9 +136,51 @@ export default function BrandPostingPage() {
       {/* Composer */}
       <Card>
         <CardHeader>
-          <CardTitle>Create Post</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle>Create Post</CardTitle>
+            <Button variant="outline" size="sm" onClick={() => setShowAI(!showAI)}>
+              <Sparkles className="w-4 h-4 mr-2 text-accent-600" />
+              {showAI ? 'Hide AI Assistant' : 'AI Assistant'}
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {showAI && (
+            <div className="mb-6 pb-6 border-b border-secondary-200">
+              <div className="flex items-center justify-between mb-4">
+                <div className="inline-flex p-1 bg-secondary-100 rounded-lg">
+                  <button
+                    onClick={() => setAiMode('single')}
+                    className={`px-3 py-1.5 text-sm rounded-md font-medium transition ${
+                      aiMode === 'single' ? 'bg-white text-primary-700 shadow-sm' : 'text-secondary-600'
+                    }`}
+                  >
+                    Single Caption
+                  </button>
+                  <button
+                    onClick={() => setAiMode('platforms')}
+                    className={`px-3 py-1.5 text-sm rounded-md font-medium transition ${
+                      aiMode === 'platforms' ? 'bg-white text-primary-700 shadow-sm' : 'text-secondary-600'
+                    }`}
+                  >
+                    Per-Platform <span className="text-accent-600">✦</span>
+                  </button>
+                </div>
+              </div>
+              {aiMode === 'single' ? (
+                <AIAssistant
+                  onApply={(caption) => {
+                    setPostContent(caption);
+                    setShowAI(false);
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  placeholder="Describe what you want to post — our AI writes the caption for you..."
+                />
+              ) : (
+                <PlatformCaptionTuner onApply={applyPlatformCaption} />
+              )}
+            </div>
+          )}
           {error && (
             <div className="mb-4 p-3 bg-error-50 border border-error-200 rounded-lg text-error-700 text-sm">{error}</div>
           )}

@@ -189,8 +189,9 @@ declare
 begin
   foreach t in array tables_with_updated_at
   loop
+    execute format('drop trigger if exists set_%s_updated_at on public.%I', t, t);
     execute format(
-      'create trigger if not exists set_%s_updated_at before update on public.%I for each row execute function public.set_updated_at()',
+      'create trigger set_%s_updated_at before update on public.%I for each row execute function public.set_updated_at()',
       t, t
     );
   end loop;
@@ -218,6 +219,18 @@ returns uuid
 language sql stable
 as $$ select auth.uid() $$;
 
+-- Helper: is the current user an admin? (security definer to avoid RLS recursion)
+create or replace function public.is_admin()
+returns boolean
+language sql stable
+security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.users
+    where id = auth.uid() and role = 'admin'
+  )
+$$;
+
 -- Users: can read own, admin can read all
 create policy "Users can read own data"
   on public.users for select
@@ -225,7 +238,7 @@ create policy "Users can read own data"
 
 create policy "Admins can read all users"
   on public.users for select
-  using (exists (select 1 from public.users where id = auth_user_id() and role = 'admin'));
+  using (public.is_admin());
 
 create policy "Users can update own data"
   on public.users for update
@@ -437,7 +450,9 @@ begin
 end;
 $$;
 
-create or replace trigger on_auth_user_created
+drop trigger if exists on_auth_user_created on auth.users;
+
+create trigger on_auth_user_created
   after insert on auth.users
   for each row
   execute function public.handle_new_user();

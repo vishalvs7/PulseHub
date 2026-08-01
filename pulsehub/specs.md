@@ -341,29 +341,101 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 | Auth: role-based `profiles` (ours: `users` table w/ role) | ✅ Done |
 | `brand_profiles` (industry, size, website) | ✅ Done (no budget-range column) |
 | `influencer_profiles` (bio, niche, engagement, verified) | ✅ Done |
-| Influencer **reach tier** (Nano/Micro/Mid/Macro) | ❌ Missing (no column) |
-| Influencer **base sponsorship rates** | ❌ Missing (priceRange computed heuristically in marketplace) |
-| Influencer search facets (niche, followers, keyword) | 🟡 Partial (ilike/contains filters; no reach-tier facet, no FTS/Meilisearch) |
+| Influencer **reach tier** (Nano/Micro/Mid/Macro) | ✅ Done (generated column from `followers_count`, tier filter in marketplace) |
+| Influencer **base sponsorship rates** | ✅ Done (`base_rate_min`/`base_rate_max`/`base_rate_currency`; marketplace uses them with heuristic fallback) |
+| Influencer search facets (niche, followers, keyword) | 🟡 Partial (ilike/contains filters + reach-tier facet; no FTS/Meilisearch) |
 | Cross-posting **dual-pane preview engine** | ❌ Missing (composer is a single basic form) |
 | Platform-native preview tab switcher + CSS overlays | ❌ Missing |
 | Character-limit validation / safe-zone overlays | ❌ Missing |
 | Media **uploader** (video/asset → S3/Storage signed URL) | ❌ Missing (media URL is a text field only) |
-| `post_targets` table (per-platform post status) | ❌ Missing (`platform` is a CSV string on `posts`) |
+| `post_targets` table (per-platform post status) | ✅ Done (table + RLS; `posting.service` writes/updates targets per platform) |
 | Deals/Inquiries state machine + `deals` table | ❌ Missing (`campaigns.status` exists, different model) |
 | Real-time chat (Supabase Realtime) | ❌ Missing (inbox is placeholder UI) |
 | Chat anti-leakage sanitization | ❌ Missing |
 | Inline campaign briefs/milestones in chat | ❌ Missing |
 | Unified analytics pipeline (cron poll 6–12h) | ❌ Missing (snapshots exist, no worker) |
 | Unified **`views`** metric normalization | ❌ Missing (`analytics_snapshots` has reach/impressions only) |
-| Social OAuth connect (IG/Twitter/LinkedIn) | 🟡 Scaffolded but broken (browser client on server, no limits) |
+| Social OAuth connect (IG/Twitter/LinkedIn) | 🟡 Scaffolded (OAuth service + connect/callback routes; needs app credentials + app review) |
 | Social middleware aggregator (Zernio/Postproxy/Phyllo) | ❌ Missing (direct OAuth today) |
 | Shadcn UI | ❌ Using custom UI components |
-| 5.1 Rate & ROI Calculator | ❌ Missing |
-| 5.2 Caption Trimmer & Thread Splitter | ❌ Missing |
-| 5.3 Character & Hashtag Counter | ❌ Missing (needed by preview engine too) |
-| 5.4 "Best Time to Post" heatmaps | ❌ Missing (needs analytics worker + audience metrics) |
-| 5.5 Comment-to-DM automation | ❌ Missing (needs platform DM APIs — Instagram/Facebook/TikTok) |
+| 5.1 Rate & ROI Calculator | ✅ Done (`/tools/rate-calculator`, `RateCalculator.tsx`) |
+| 5.2 Caption Trimmer & Thread Splitter | ✅ Done (`/tools/thread-splitter`, `ThreadSplitter.tsx`) |
+| 5.3 Character & Hashtag Counter | ✅ Done (`/tools/char-counter`, `CharCounter.tsx`, shared `socialLimits.ts`) |
+| 5.4 "Best Time to Post" heatmaps | 🟡 Done as demo (static activity model; needs analytics worker + live audience metrics) — `/brand/[uid]/best-time-to-post` |
+| 5.5 Comment-to-DM automation | 🟡 Done as draft builder (saved to localStorage; needs DM-capable platform APIs) — `/brand/[uid]/comment-to-dm` |
+| Creator Academy (docs + sidebar) | ✅ Done (`/academy`, `/academy/[slug]`, 4 modules / 13 docs, docs-style layout) |
 
-**Overall alignment: the foundation (~35–40%) is in place** — auth/RBAC, both profile tables, RLS, campaigns, marketplace search, analytics schema, and OAuth scaffolding. The four headline features (preview engine, real-time deal-based chat, analytics pipeline, social aggregator) plus all five growth micro-tools are mostly unbuilt.
+**Overall alignment: the foundation (~50%) is in place** — auth/RBAC, both profile tables (incl. reach tier + base rates), RLS, campaigns, marketplace search (incl. reach-tier facet), `post_targets`, analytics schema, OAuth scaffolding, all five growth micro-tools, and the Creator Academy are built. The remaining headline features (preview engine, real-time deal-based chat, analytics pipeline, social aggregator) are still unbuilt.
 
-**Closest wins:** 5.1, 5.2, 5.3 are client-side-only and independent of the social API work — they can ship in days and unlock the "free tools → SEO → signup" funnel while the platform features catch up. 5.4 depends on Feature 4's analytics worker; 5.5 depends on DM-capable platform integrations (Instagram/Facebook/TikTok), which the spec defers to the social middleware aggregator.
+**Closest wins:** All five micro-tools (5.1–5.5) are now shipped and client-side. 5.4 needs Feature 4's analytics worker for real audience metrics; 5.5 needs DM-capable platform integrations (Instagram/Facebook/TikTok), which the spec defers to the social middleware aggregator.
+
+---
+
+# Session Log — Live DB, Auth, AI & Mobile-First
+
+Recent working sessions and their outcomes. Supabase is now the **live production database** (project `elsowkdruovxrotbxsmi`, region `ap-northeast-2`), fully migrated, seeded, and verified end-to-end.
+
+## What Was Done Recently
+
+### 1. Supabase Live Database (Applied & Verified)
+- **Migrations applied to the cloud project:** `supabase/migrations/00001_schema.sql` (12 tables: `users`, `brand_profiles`, `influencer_profiles`, `posts`, `post_targets`, `campaigns`, `campaign_influencers`, `social_accounts`, `analytics_snapshots`, `conversations`, `messages`, `notifications`; 38 RLS policies; functions `set_updated_at`, `auth_user_id`, `handle_new_user`, `is_admin`; triggers) and `00002_quick_wins.sql` (`reach_tier` generated column on `influencer_profiles`, `base_rate_min`/`base_rate_max`/`base_rate_currency` on `influencer_profiles`, `post_targets` table).
+- **Migration bugs fixed:** `CREATE TRIGGER IF NOT EXISTS` → DO-loop drop+create; `CREATE OR REPLACE TRIGGER` → drop+create; **infinite RLS recursion** on "Admins can read all users" → security-definer `is_admin()` helper (both live DB and migration file updated).
+- **Seed applied:** 7 users, 5 influencers, 2 brands, 5 campaigns, 28 social accounts, 3 conversations, 6 messages, 6 analytics snapshots; seed UUIDs fixed to valid UUIDs.
+- **Verified e2e:** auth signup triggers `handle_new_user` → `public.users` row auto-created; RLS returns only own row; `influencer_profiles` insert works; `reach_tier='micro'` derived for 12.5k followers; posts + `post_targets` insert fine.
+- **Access:** pooler session mode `aws-1-ap-northeast-2.pooler.supabase.com:5432`, tenant `postgres.elsowkdruovxrotbxsmi`.
+
+### 2. Auth Flow (Working End-to-End)
+- Register → `/api/auth/register` (admin `createUser` with **`email_confirm: true`** — email verification auto-approved) → redirect to `/login`.
+- Login → `AuthService.loginWithEmail` → `signInWithPassword` → role from `users.role` (with admin override via `/api/auth/admin/check`) → `redirectPath` per role.
+- **Middleware fixed:** previously checked a cookie named `sb-access-token`, which `@supabase/ssr` never creates (real cookie: `sb-<project-ref>-auth-token`). Rewrote `src/middleware.ts` to use `createServerClient` + `supabase.auth.getUser()`, and added role-based enforcement:
+  - Unauthenticated on a protected route → `/login?redirect=...`
+  - Authenticated on `/login` or `/register` → redirected to their own role dashboard
+  - Authenticated on a wrong-role path (e.g. brand on `/influencer/...`) → redirected to their own dashboard
+- **E2E verified live:** influencer → `/influencer/[uid]`, brand → `/brand/[uid]`; test users cleaned up after.
+
+### 3. AI Content Generation (Working)
+- **`/api/ai/generate`** route: `single` mode (full post) and `platforms` mode (per-platform captions with `<<<platform:...>>>` markers), streaming response.
+- Provider: **Groq** (`llama-3.3-70b-versatile`) for captions — verified streaming live.
+- **Gemini** for content generation: model updated to `gemini-3.5-flash` (`gemini-2.5-flash`/`-lite` unavailable to new users). Key + project number in `.env.local`, verified working.
+- UI: `src/components/ai/` (composer integration), `/influencer/[uid]/ai` and `/brand/[uid]/ai` pages.
+
+### 4. Mobile-First Responsive (Done)
+- `Sidebar.tsx` → slide-in drawer on `<lg` (`fixed inset-y-0`), fixed rail + collapse on desktop; closes on nav click (`onNavigate`).
+- `SiteNav.tsx` hamburger menu; brand/influencer layouts `min-h-screen lg:h-screen lg:flex` with `px-4 pt-20 lg:p-8` main.
+- Homepage hero responsive; `SiteFooter.tsx` added.
+- Build green.
+
+### 5. Pricing & Zernio Scope Decision
+- **Pricing page** (`/pricing`): 4-tier grid, Free tier ($0/30 posts), Popular/Free badges; config in `src/config/features.ts`.
+- **Zernio decision (brainstorm):** Zernio covers **only** cross-posting + unified comments/likes/inbox vertical. Everything else (AI, marketplace, analytics intelligence, academy) stays custom stack. `ZERNIO_API_KEY` added to env **only** — building on Zernio is paused pending explicit go-ahead.
+
+## What's Working
+
+- ✅ Auth register → login → role-based dashboard redirect (verified live, middleware fixed)
+- ✅ Email verification auto-approved on registration
+- ✅ RLS + schema + seed on live Supabase (all policies verified)
+- ✅ AI content generation (Groq + Gemini, single & platforms modes)
+- ✅ Mobile-first responsive UI (drawer sidebar, hamburger nav)
+- ✅ Pricing page, Creator Academy, all 5 growth micro-tools
+- ✅ `npm run build` passes
+
+## What's Not Working / Not Built
+
+- ❌ **Zernio integration** — key in env only; cross-posting engine + unified inbox not built (user paused this)
+- ❌ **Platform OAuth connect** (IG/Twitter/LinkedIn/Reddit) — service + routes scaffolded, but no app credentials / app review yet; no real platform posting
+- ❌ **Preview engine** (dual-pane composer + platform-native CSS overlays) — composer is a single basic form
+- ❌ **Media uploader** (video → S3/Supabase Storage) — media URL is a text field only
+- ❌ **Real-time deal-based chat** + anti-leakage sanitization — inbox is placeholder UI
+- ❌ **Unified analytics pipeline** (cron 6–12h) + unified `views` metric — snapshots exist, no worker
+- ❌ **Admin panel** — no admin dashboard page
+- 🟡 "Best Time to Post" + Comment-to-DM — demo/draft only (need analytics worker / DM-capable platform APIs)
+- 🟡 Marketplace search — ilike/contains + reach-tier facet (no FTS/Meilisearch)
+
+## Next Steps
+
+1. Get explicit go-ahead on Zernio scope, then build cross-posting + unified inbox on it
+2. Set up real platform OAuth credentials (IG Graph, X, LinkedIn, Reddit) and app review
+3. Build the dual-pane composer + preview renderer (Feature 2)
+4. Build real-time chat (Supabase Realtime) + Deals state machine
+5. Build the analytics worker/cron for live metrics
+6. Build the admin panel

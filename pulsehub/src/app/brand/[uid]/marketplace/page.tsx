@@ -10,7 +10,7 @@ import {
   MessageSquare, TrendingUp, DollarSign, SlidersHorizontal
 } from 'lucide-react';
 import { MarketplaceService } from '@/services/marketplace.service';
-import { InfluencerListing } from '@/types/influencer';
+import { InfluencerListing, REACH_TIER_LABELS, REACH_TIER_ORDER, ReachTier } from '@/types/influencer';
 
 export default function BrandMarketplacePage() {
   const params = useParams();
@@ -20,6 +20,7 @@ export default function BrandMarketplacePage() {
   const [stats, setStats] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedNiche, setSelectedNiche] = useState('all');
+  const [selectedReachTier, setSelectedReachTier] = useState<ReachTier | 'all'>('all');
   const [minFollowers, setMinFollowers] = useState('');
   const [maxPrice, setMaxPrice] = useState('');
   const [sortBy, setSortBy] = useState<'relevance' | 'followers' | 'engagement' | 'price'>('relevance');
@@ -30,7 +31,7 @@ export default function BrandMarketplacePage() {
   useEffect(() => {
     const load = async () => {
       const [data, marketplaceStats] = await Promise.all([
-        MarketplaceService.searchInfluencers({ search: searchQuery, niche: selectedNiche, sortBy }),
+        MarketplaceService.searchInfluencers({ search: searchQuery, niche: selectedNiche, reachTier: selectedReachTier, sortBy }),
         MarketplaceService.getMarketplaceStats(),
       ]);
       setInfluencers(data);
@@ -38,13 +39,14 @@ export default function BrandMarketplacePage() {
       setLoading(false);
     };
     load();
-  }, [searchQuery, selectedNiche, sortBy]);
+  }, [searchQuery, selectedNiche, selectedReachTier, sortBy]);
 
   useEffect(() => {
     const refetch = async () => {
       const data = await MarketplaceService.searchInfluencers({
         search: searchQuery,
         niche: selectedNiche,
+        reachTier: selectedReachTier,
         minFollowers: minFollowers ? Number(minFollowers) : undefined,
         maxPrice: maxPrice ? Number(maxPrice) : undefined,
         sortBy,
@@ -107,7 +109,7 @@ export default function BrandMarketplacePage() {
 
       <Card>
         <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
             <div>
               <label className="block text-sm font-medium text-secondary-700 mb-2">Search Influencers</label>
               <div className="relative">
@@ -126,6 +128,16 @@ export default function BrandMarketplacePage() {
               <select value={selectedNiche} onChange={(e) => setSelectedNiche(e.target.value)}
                 className="w-full px-4 py-3 border border-secondary-300 rounded-lg focus:border-primary-500 outline-none">
                 {niches.map((n) => <option key={n} value={n}>{n === 'all' ? 'All Niches' : n}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-secondary-700 mb-2">Reach Tier</label>
+              <select value={selectedReachTier} onChange={(e) => setSelectedReachTier(e.target.value as ReachTier | 'all')}
+                className="w-full px-4 py-3 border border-secondary-300 rounded-lg focus:border-primary-500 outline-none">
+                <option value="all">All Tiers</option>
+                {REACH_TIER_ORDER.map((tier) => (
+                  <option key={tier} value={tier}>{REACH_TIER_LABELS[tier]}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -191,6 +203,11 @@ export default function BrandMarketplacePage() {
                       {inf.featured && <span className="px-2 py-1 bg-gradient-to-r from-primary-600 to-accent-600 text-white text-xs rounded-lg">Featured</span>}
                     </div>
                     <p className="text-secondary-600">@{inf.displayName.toLowerCase().replace(/\s/g, '')}</p>
+                    {inf.reachTier && (
+                      <span className="inline-block mt-1 px-2 py-0.5 bg-accent-100 text-accent-700 text-xs font-medium rounded">
+                        {REACH_TIER_LABELS[inf.reachTier]}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <button className="p-2 hover:bg-secondary-100 rounded-lg">

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { ReactNode } from 'react';
 import { ArrowLeft, Wrench } from 'lucide-react';
 import SiteNav from '@/components/SiteNav';
+import SiteFooter from '@/components/SiteFooter';
 
 export default function ToolLayout({
   title,
@@ -13,7 +14,7 @@ export default function ToolLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-primary-50">
+    <div className="min-h-screen flex flex-col bg-primary-50">
       <SiteNav />
 
       <section className="py-12 px-6">
@@ -47,6 +48,8 @@ export default function ToolLayout({
           </div>
         </div>
       </section>
+
+      <SiteFooter />
     </div>
   );
 }

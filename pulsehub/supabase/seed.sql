@@ -38,13 +38,13 @@ values
 on conflict (id) do nothing;
 
 -- Influencer profiles
-insert into public.influencer_profiles (user_id, display_name, email, bio, niche, location, followers_count, engagement_rate, trust_score, is_verified, created_at, updated_at)
+insert into public.influencer_profiles (user_id, display_name, email, bio, niche, location, followers_count, engagement_rate, trust_score, is_verified, base_rate_min, base_rate_max, created_at, updated_at)
 values
-  ('a0000000-0000-0000-0000-000000000001', 'Sarah Chen', 'sarah@example.com', 'Lifestyle & fashion content creator', '{Lifestyle,Fashion,Travel}', 'Los Angeles, CA', 125000, 4.80, 92, true, now(), now()),
-  ('a0000000-0000-0000-0000-000000000002', 'Mike Rossi', 'mike@example.com', 'Adventure traveler & photographer', '{Travel,Adventure,Photography}', 'Miami, FL', 450000, 6.20, 88, true, now(), now()),
-  ('a0000000-0000-0000-0000-000000000003', 'Lena Beauty', 'lena@example.com', 'Beauty & skincare expert', '{Beauty,Skincare,Makeup}', 'New York, NY', 2100000, 3.90, 95, true, now(), now()),
-  ('a0000000-0000-0000-0000-000000000004', 'TechGuru', 'tech@example.com', 'Tech reviews & unboxings', '{Technology,Gadgets,Reviews}', 'San Francisco, CA', 850000, 5.40, 85, true, now(), now()),
-  ('a0000000-0000-0000-0000-000000000005', 'FitnessFanatic', 'fit@example.com', 'Fitness coach & nutrition enthusiast', '{Fitness,Health,Nutrition}', 'Austin, TX', 320000, 7.10, 90, true, now(), now())
+  ('a0000000-0000-0000-0000-000000000001', 'Sarah Chen', 'sarah@example.com', 'Lifestyle & fashion content creator', '{Lifestyle,Fashion,Travel}', 'Los Angeles, CA', 125000, 4.80, 92, true, 800, 1800, now(), now()),
+  ('a0000000-0000-0000-0000-000000000002', 'Mike Rossi', 'mike@example.com', 'Adventure traveler & photographer', '{Travel,Adventure,Photography}', 'Miami, FL', 450000, 6.20, 88, true, 2500, 5500, now(), now()),
+  ('a0000000-0000-0000-0000-000000000003', 'Lena Beauty', 'lena@example.com', 'Beauty & skincare expert', '{Beauty,Skincare,Makeup}', 'New York, NY', 2100000, 3.90, 95, true, 9000, 25000, now(), now()),
+  ('a0000000-0000-0000-0000-000000000004', 'TechGuru', 'tech@example.com', 'Tech reviews & unboxings', '{Technology,Gadgets,Reviews}', 'San Francisco, CA', 850000, 5.40, 85, true, 5000, 12000, now(), now()),
+  ('a0000000-0000-0000-0000-000000000005', 'FitnessFanatic', 'fit@example.com', 'Fitness coach & nutrition enthusiast', '{Fitness,Health,Nutrition}', 'Austin, TX', 320000, 7.10, 90, true, 1500, 4000, now(), now())
 on conflict (user_id) do nothing;
 
 -- Brand profiles
@@ -102,29 +102,29 @@ on conflict (campaign_id, influencer_id) do nothing;
 -- Conversations (Brand → Influencer DMs)
 insert into public.conversations (id, subject, created_at, updated_at)
 values
-  ('conv-00000000-0000-0000-0000-000000000001', 'Collaboration: Summer Vibes 2024', now(), now()),
-  ('conv-00000000-0000-0000-0000-000000000002', 'Partnership opportunity', now(), now()),
-  ('conv-00000000-0000-0000-0000-000000000003', 'Spring Collection campaign', now(), now())
+  ('00000000-0000-0000-0000-000000000001', 'Collaboration: Summer Vibes 2024', now(), now()),
+  ('00000000-0000-0000-0000-000000000002', 'Partnership opportunity', now(), now()),
+  ('00000000-0000-0000-0000-000000000003', 'Spring Collection campaign', now(), now())
 on conflict (id) do nothing;
 
 insert into public.conversation_participants (conversation_id, user_id, last_read_at)
 values
-  ('conv-00000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', now()),
-  ('conv-00000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', now()),
-  ('conv-00000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', now()),
-  ('conv-00000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000004', now()),
-  ('conv-00000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', now()),
-  ('conv-00000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', now())
+  ('00000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', now()),
+  ('00000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', now()),
+  ('00000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', now()),
+  ('00000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000004', now()),
+  ('00000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', now()),
+  ('00000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', now())
 on conflict (conversation_id, user_id) do nothing;
 
 insert into public.messages (conversation_id, sender_id, content, read, created_at)
 values
-  ('conv-00000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'Hi Sarah! We love your content and would like to collaborate on our Summer Vibes campaign.', true, now() - interval '3 days'),
-  ('conv-00000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Thanks for reaching out! I''d love to work together. What did you have in mind?', true, now() - interval '2 days'),
-  ('conv-00000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'We''re looking for 3 Instagram posts and 2 TikTok videos over 2 months. Budget is flexible!', false, now() - interval '1 day'),
-  ('conv-00000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 'Hey TechGuru! Interested in reviewing our new Nova Series products?', true, now() - interval '5 days'),
-  ('conv-00000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000004', 'Absolutely! I''ve been following your brand. Send over the details.', true, now() - interval '4 days'),
-  ('conv-00000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', 'Hi Lena! We''d love to feature you in our Spring Collection campaign.', false, now() - interval '6 hours');
+  ('00000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'Hi Sarah! We love your content and would like to collaborate on our Summer Vibes campaign.', true, now() - interval '3 days'),
+  ('00000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'Thanks for reaching out! I''d love to work together. What did you have in mind?', true, now() - interval '2 days'),
+  ('00000000-0000-0000-0000-000000000001', 'b0000000-0000-0000-0000-000000000001', 'We''re looking for 3 Instagram posts and 2 TikTok videos over 2 months. Budget is flexible!', false, now() - interval '1 day'),
+  ('00000000-0000-0000-0000-000000000002', 'b0000000-0000-0000-0000-000000000001', 'Hey TechGuru! Interested in reviewing our new Nova Series products?', true, now() - interval '5 days'),
+  ('00000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000004', 'Absolutely! I''ve been following your brand. Send over the details.', true, now() - interval '4 days'),
+  ('00000000-0000-0000-0000-000000000003', 'b0000000-0000-0000-0000-000000000002', 'Hi Lena! We''d love to feature you in our Spring Collection campaign.', false, now() - interval '6 hours');
 
 -- Posts
 insert into public.posts (user_id, platform, content, media_urls, status, published_at, created_at, updated_at)

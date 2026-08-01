@@ -31,6 +31,21 @@ export class PostingService {
       .single();
 
     if (error) return { success: false, error: error.message };
+
+    if (post) {
+      const { error: targetsError } = await supabase.from('post_targets').insert(
+        attachments.map(a => ({
+          post_id: post.id,
+          platform: a.platform,
+          content: a.content,
+          media_urls: a.mediaUrls,
+          status: scheduledFor && scheduledFor > now ? 'scheduled' : 'pending',
+          scheduled_for: scheduledFor?.toISOString(),
+        }))
+      );
+      if (targetsError) return { success: false, error: targetsError.message };
+    }
+
     return { success: true, post };
   }
 
@@ -80,19 +95,27 @@ export class PostingService {
 
         results.push({ platform: attachment.platform, success: true, postId: result.postId });
 
-        await supabase.from('posts').update({
+        await supabase.from('post_targets').update({
           platform_post_id: result.postId,
           status: 'published',
           published_at: new Date().toISOString(),
-        }).eq('id', postId);
+        }).eq('post_id', postId).eq('platform', attachment.platform);
 
       } catch (err: any) {
         results.push({ platform: attachment.platform, success: false, error: err.message });
-        await supabase.from('posts').update({ status: 'failed' }).eq('id', postId);
+        await supabase.from('post_targets').update({
+          status: 'failed',
+          error: err.message,
+        }).eq('post_id', postId).eq('platform', attachment.platform);
       }
     }
 
     const allSuccess = results.every(r => r.success);
+
+    await supabase.from('posts').update({
+      status: allSuccess ? 'published' : 'failed',
+      published_at: allSuccess ? new Date().toISOString() : undefined,
+    }).eq('id', postId);
 
     return {
       success: allSuccess,

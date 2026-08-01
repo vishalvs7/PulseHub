@@ -133,6 +133,7 @@ export class InfluencerService {
       engagementRate: d.engagement_rate,
       trustScore: d.trust_score,
       isVerified: d.is_verified,
+      reachTier: d.reach_tier,
       tags: [],
       featured: d.trust_score >= 85,
     }));

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { Calculator, Scissors, TextCursorInput, Clock, MessageSquare, Wrench, ArrowRight, Lock } from 'lucide-react';
 import SiteNav from '@/components/SiteNav';
+import SiteFooter from '@/components/SiteFooter';
 
 export const metadata: Metadata = {
   title: 'Free Social Media Tools | PulseHub',
@@ -48,7 +49,7 @@ const premiumTools = [
 
 export default function ToolsPage() {
   return (
-    <div className="min-h-screen bg-primary-50">
+    <div className="min-h-screen flex flex-col bg-primary-50">
       <SiteNav />
 
       <section className="py-16 px-6">
@@ -120,6 +121,8 @@ export default function ToolsPage() {
           </div>
         </div>
       </section>
+
+      <SiteFooter />
     </div>
   );
 }
