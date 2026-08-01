@@ -435,6 +435,7 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 
 - **URL:** `https://prepost-app.vercel.app` (production). Note: `prepost.vercel.app` and `pulsehub.vercel.app` are both taken by other Vercel accounts/teams.
 - **Project:** `pulsehub` under team `amp-global`; `vercel.json` (Next.js framework, `npm run build`).
+- **Git integration:** connected to `github.com/vishalvs7/PulseHub`; production branch `main` — pushes to `main` auto-deploy to production.
 - **Env vars pushed to Vercel (production):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_PROJECT_NUMBER`, `ZERNIO_API_KEY`. `VERCEL_TOKEN` is stored in local `.env.local` only (gitignored).
 - **Verified live:** homepage, register, login, pricing, tools all 200; register API creates auto-confirmed users; login → role dashboard redirect works; middleware protects `/influencer|brand|admin/[uid]` (307 → `/login?redirect=...`).
 - **Known deployment warning:** Next.js reports `middleware` file convention deprecated → use `proxy` instead (Next 16). Non-blocking; build succeeds.
