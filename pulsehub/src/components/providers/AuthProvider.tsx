@@ -1,8 +1,7 @@
-// src/components/providers/AuthProvider.tsx
 'use client';
 
 import { createContext, useContext, useEffect, useState } from 'react';
-import { User } from '@supabase/supabase-js';
+import { User, AuthChangeEvent, Session } from '@supabase/supabase-js';
 import { getSupabase } from '@/lib/supabase/client';
 import { AuthService } from '@/services/auth.service';
 import { AppUser } from '@/types/user';
@@ -26,15 +25,14 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const [userData, setUserData] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const supabase = getSupabase();
-
   const fetchUserData = async (userId: string) => {
     const data = await AuthService.getUserData(userId);
     setUserData(data);
   };
 
   useEffect(() => {
-    // Get initial session
+    const supabase = getSupabase();
+
     const initAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       const currentUser = session?.user || null;
@@ -49,9 +47,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
     initAuth();
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: AuthChangeEvent, session: Session | null) => {
         const currentUser = session?.user || null;
         setUser(currentUser);
         
@@ -68,7 +65,7 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     return () => {
       subscription.unsubscribe();
     };
-  }, [supabase]);
+  }, []);
 
   const signOut = async () => {
     await AuthService.logout();

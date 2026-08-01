@@ -11,13 +11,16 @@ import {
   Send,
   Inbox,
   Users,
-  CreditCard,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
   Zap,
   UserCircle,
+  Clock,
+  MessageSquare,
+  Wrench,
+  GraduationCap,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -28,6 +31,7 @@ interface SidebarItem {
 
 interface SidebarProps {
   type: 'brand' | 'influencer';
+  uid: string;
   userData?: {
     name: string;
     email: string;
@@ -36,32 +40,42 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-const brandItems: SidebarItem[] = [
-  { name: 'Dashboard', href: '/dashboard/brand', icon: LayoutDashboard },
-  { name: 'Analytics', href: '/dashboard/brand/analytics', icon: BarChart3 },
-  { name: 'Campaigns', href: '/dashboard/brand/campaigns', icon: Megaphone },
-  { name: 'Posting', href: '/dashboard/brand/posting', icon: Send },
-  { name: 'Inbox', href: '/dashboard/brand/inbox', icon: Inbox },
-  { name: 'Marketplace', href: '/dashboard/brand/marketplace', icon: Users },
-  { name: 'Pricing', href: '/dashboard/brand/pricing', icon: CreditCard },
-  { name: 'Settings', href: '/dashboard/brand/settings', icon: Settings },
-];
+function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
+  const base = `/${type}/${uid}`;
+  if (type === 'brand') {
+    return [
+      { name: 'Dashboard', href: base, icon: LayoutDashboard },
+      { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
+      { name: 'Campaigns', href: `${base}/campaigns`, icon: Megaphone },
+      { name: 'Posting', href: `${base}/posting`, icon: Send },
+      { name: 'Inbox', href: `${base}/inbox`, icon: Inbox },
+      { name: 'Marketplace', href: `${base}/marketplace`, icon: Users },
+      { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
+      { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: MessageSquare },
+      { name: 'Academy', href: '/academy', icon: GraduationCap },
+      { name: 'Free Tools', href: '/tools', icon: Wrench },
+      { name: 'Settings', href: `${base}/settings`, icon: Settings },
+    ];
+  }
+  return [
+    { name: 'Dashboard', href: base, icon: LayoutDashboard },
+    { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
+    { name: 'Connections', href: `${base}/connections`, icon: Users },
+    { name: 'Profile', href: `${base}/profile`, icon: UserCircle },
+    { name: 'Inbox', href: `${base}/inbox`, icon: Inbox },
+    { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
+    { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: MessageSquare },
+    { name: 'Academy', href: '/academy', icon: GraduationCap },
+    { name: 'Free Tools', href: '/tools', icon: Wrench },
+    { name: 'Settings', href: `${base}/settings`, icon: Settings },
+  ];
+}
 
-const influencerItems: SidebarItem[] = [
-  { name: 'Dashboard', href: '/dashboard/influencer', icon: LayoutDashboard },
-  { name: 'Analytics', href: '/dashboard/influencer/analytics', icon: BarChart3 },
-  { name: 'Connections', href: '/dashboard/influencer/connections', icon: Users },
-  { name: 'Profile', href: '/dashboard/influencer/profile', icon: UserCircle },
-  { name: 'Inbox', href: '/dashboard/influencer/inbox', icon: Inbox },
-  { name: 'Marketplace', href: '/dashboard/influencer/marketplace', icon: Users },
-  { name: 'Settings', href: '/dashboard/influencer/settings', icon: Settings },
-];
-
-export default function Sidebar({ type, userData, onLogout }: SidebarProps) {
+export default function Sidebar({ type, uid, userData, onLogout }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   
-  const items = type === 'brand' ? brandItems : influencerItems;
+  const items = buildItems(type, uid);
 
   return (
     <div className={`h-full bg-white border-r border-secondary-200 transition-all duration-300 ${
@@ -70,9 +84,9 @@ export default function Sidebar({ type, userData, onLogout }: SidebarProps) {
       {/* Logo */}
       <div className="p-6 border-b border-secondary-100">
         <div className="flex items-center justify-between">
-          <Link href={type === 'brand' ? '/dashboard/brand' : '/dashboard/influencer'} 
+          <Link href={`/${type}/${uid}`} 
                 className="flex items-center space-x-3">
-            <div className={`w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-700 rounded-xl flex items-center justify-center ${
+            <div className={`w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-700 rounded-lg flex items-center justify-center ${
               collapsed ? 'mx-auto' : ''
             }`}>
               <Zap className="w-6 h-6 text-white" />
@@ -80,7 +94,7 @@ export default function Sidebar({ type, userData, onLogout }: SidebarProps) {
             {!collapsed && (
               <div>
                 <span className="text-xl font-bold text-secondary-900">PulseHub</span>
-                <div className="text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded-full mt-1 inline-block">
+                <div className="text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded-lg mt-1 inline-block">
                   {type === 'brand' ? 'Brand' : 'Influencer'}
                 </div>
               </div>

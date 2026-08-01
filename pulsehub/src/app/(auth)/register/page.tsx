@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, User, Eye, EyeOff, Building, Users, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import AuthLayout from '@/components/auth/AuthLayout';
 import { AuthService } from '@/services/auth.service';
 import type { UserRole } from '@/types/user';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const defaultRole = (searchParams.get('role') as UserRole) || 'influencer';
@@ -59,7 +60,7 @@ export default function RegisterPage() {
       // ✅ Simply redirect to login page after successful registration
       router.push('/login');
     } else {
-      setError(result.error);
+      setError(result.error || 'An error occurred');
     }
 
     setLoading(false);
@@ -71,25 +72,22 @@ export default function RegisterPage() {
 
     const result = await AuthService.loginWithGoogle(role);
     
-    if (result.success) {
-      router.push('/');
-    } else {
-      setError(result.error);
+    if (!result.success) {
+      setError(result.error || 'An error occurred');
     }
     
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-purple-50 to-white p-4">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl mb-4">
-            <span className="text-3xl font-bold text-white font-montserrat">P</span>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 font-montserrat">Join PulseHub</h1>
-          <p className="text-gray-600 mt-2">Create your free account to get started</p>
+    <AuthLayout>
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-primary-600 to-accent-600 rounded-lg mb-4 lg:hidden">
+          <span className="text-3xl font-bold text-white font-sans">P</span>
         </div>
+        <h1 className="text-3xl font-bold text-gray-900 font-sans">Join PulseHub</h1>
+        <p className="text-gray-600 mt-2">Start your 14-day free trial to get started</p>
+      </div>
 
         <Card className="p-8">
           {error && (
@@ -106,24 +104,24 @@ export default function RegisterPage() {
               <button
                 type="button"
                 onClick={() => setRole('influencer')}
-                className={`p-4 border-2 rounded-xl flex flex-col items-center justify-center transition-all ${
-                  role === 'influencer' ? 'border-purple-600 bg-purple-50' : 'border-gray-300 hover:border-gray-400'
+                className={`p-4 border-2 rounded-lg flex flex-col items-center justify-center transition-all ${
+                  role === 'influencer' ? 'border-primary-600 bg-primary-50' : 'border-gray-300 hover:border-gray-400'
                 }`}
               >
-                <Users className={`w-6 h-6 mb-2 ${role === 'influencer' ? 'text-purple-600' : 'text-gray-500'}`} />
-                <span className={`font-medium ${role === 'influencer' ? 'text-purple-700' : 'text-gray-700'}`}>Influencer</span>
-                <span className="text-xs text-gray-500 mt-1">Free forever</span>
+                <Users className={`w-6 h-6 mb-2 ${role === 'influencer' ? 'text-primary-600' : 'text-gray-500'}`} />
+                <span className={`font-medium ${role === 'influencer' ? 'text-primary-700' : 'text-gray-700'}`}>Influencer</span>
+                <span className="text-xs text-gray-500 mt-1">14-day trial</span>
               </button>
               <button
                 type="button"
                 onClick={() => setRole('brand')}
-                className={`p-4 border-2 rounded-xl flex flex-col items-center justify-center transition-all ${
-                  role === 'brand' ? 'border-purple-600 bg-purple-50' : 'border-gray-300 hover:border-gray-400'
+                className={`p-4 border-2 rounded-lg flex flex-col items-center justify-center transition-all ${
+                  role === 'brand' ? 'border-primary-600 bg-primary-50' : 'border-gray-300 hover:border-gray-400'
                 }`}
               >
-                <Building className={`w-6 h-6 mb-2 ${role === 'brand' ? 'text-purple-600' : 'text-gray-500'}`} />
-                <span className={`font-medium ${role === 'brand' ? 'text-purple-700' : 'text-gray-700'}`}>Brand</span>
-                <span className="text-xs text-gray-500 mt-1">Free trial</span>
+                <Building className={`w-6 h-6 mb-2 ${role === 'brand' ? 'text-primary-600' : 'text-gray-500'}`} />
+                <span className={`font-medium ${role === 'brand' ? 'text-primary-700' : 'text-gray-700'}`}>Brand</span>
+                <span className="text-xs text-gray-500 mt-1">14-day trial</span>
               </button>
             </div>
           </div>
@@ -138,7 +136,7 @@ export default function RegisterPage() {
                   name="displayName"
                   value={formData.displayName}
                   onChange={(e) => setFormData({...formData, displayName: e.target.value})}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder={role === 'brand' ? 'Company Name' : 'Your Name'}
                   required
                   disabled={loading}
@@ -156,7 +154,7 @@ export default function RegisterPage() {
                     name="companyName"
                     value={formData.companyName}
                     onChange={(e) => setFormData({...formData, companyName: e.target.value})}
-                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                     placeholder="Your Company Name"
                     disabled={loading}
                   />
@@ -173,7 +171,7 @@ export default function RegisterPage() {
                   name="email"
                   value={formData.email}
                   onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="you@example.com"
                   required
                   disabled={loading}
@@ -190,7 +188,7 @@ export default function RegisterPage() {
                   name="password"
                   value={formData.password}
                   onChange={(e) => setFormData({...formData, password: e.target.value})}
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="••••••••"
                   required
                   disabled={loading}
@@ -215,7 +213,7 @@ export default function RegisterPage() {
                   name="confirmPassword"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="••••••••"
                   required
                   disabled={loading}
@@ -249,11 +247,18 @@ export default function RegisterPage() {
 
           <div className="mt-8 text-center">
             <p className="text-gray-600">
-              Already have an account? <Link href="/login" className="text-purple-600 hover:text-purple-800 font-medium">Sign in</Link>
+              Already have an account? <Link href="/login" className="text-primary-600 hover:text-primary-800 font-medium">Sign in</Link>
             </p>
           </div>
         </Card>
-      </div>
-    </div>
+    </AuthLayout>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <RegisterForm />
+    </Suspense>
   );
 }

@@ -582,7 +582,7 @@ export default function InfluencerSettingsPage() {
                             <div className="flex items-center space-x-2">
                               <h4 className="font-medium text-secondary-900">{session.device}</h4>
                               {session.current && (
-                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Current</span>
+                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg">Current</span>
                               )}
                             </div>
                             <p className="text-sm text-secondary-600">{session.location} • {session.time}</p>

@@ -149,7 +149,7 @@ export default function InfluencerProfilePage() {
                 <div className="flex items-start space-x-6">
                   {/* Avatar */}
                   <div className="relative">
-                    <div className="w-24 h-24 bg-gradient-to-r from-primary-500 to-pink-500 rounded-full flex items-center justify-center text-white text-3xl font-bold">
+                    <div className="w-24 h-24 bg-gradient-to-r from-primary-500 to-accent-500 rounded-full flex items-center justify-center text-white text-3xl font-bold">
                       SC
                     </div>
                     {editMode && (
@@ -188,7 +188,7 @@ export default function InfluencerProfilePage() {
                       {profile.niche.map((tag) => (
                         <span
                           key={tag}
-                          className="px-3 py-1 bg-primary-100 text-primary-700 text-sm rounded-full"
+                          className="px-3 py-1 bg-primary-100 text-primary-700 text-sm rounded-lg"
                         >
                           {tag}
                         </span>
@@ -300,7 +300,7 @@ export default function InfluencerProfilePage() {
                     {profile.languages.map((language) => (
                       <span
                         key={language}
-                        className="px-3 py-1 bg-secondary-100 text-secondary-700 text-sm rounded-full"
+                        className="px-3 py-1 bg-secondary-100 text-secondary-700 text-sm rounded-lg"
                       >
                         {language}
                       </span>

@@ -27,9 +27,9 @@ export function Card({
   return (
     <div
       className={cn(
-        'rounded-xl border transition-all duration-300',
+        'rounded-lg border transition-all duration-300',
         gradient
-          ? 'bg-gradient-to-br from-primary-50 to-pink-50 border-primary-100'
+          ? 'bg-gradient-to-br from-primary-50 to-accent-50 border-primary-100'
           : 'bg-white border-gray-200',
         paddingClasses[padding],
         hover && 'hover:shadow-medium hover:-translate-y-1 cursor-pointer',

@@ -128,11 +128,11 @@ export default function BrandSettingsPage() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'active':
-        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Active</span>;
+        return <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg">Active</span>;
       case 'pending':
-        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-full">Pending</span>;
+        return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 text-xs rounded-lg">Pending</span>;
       case 'inactive':
-        return <span className="px-2 py-1 bg-secondary-100 text-secondary-800 text-xs rounded-full">Inactive</span>;
+        return <span className="px-2 py-1 bg-secondary-100 text-secondary-800 text-xs rounded-lg">Inactive</span>;
       default:
         return null;
     }
@@ -141,11 +141,11 @@ export default function BrandSettingsPage() {
   const getRoleBadge = (role: string) => {
     switch (role) {
       case 'admin':
-        return <span className="px-2 py-1 bg-primary-100 text-primary-800 text-xs rounded-full">Admin</span>;
+        return <span className="px-2 py-1 bg-primary-100 text-primary-800 text-xs rounded-lg">Admin</span>;
       case 'editor':
-        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">Editor</span>;
+        return <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-lg">Editor</span>;
       case 'viewer':
-        return <span className="px-2 py-1 bg-secondary-100 text-secondary-800 text-xs rounded-full">Viewer</span>;
+        return <span className="px-2 py-1 bg-secondary-100 text-secondary-800 text-xs rounded-lg">Viewer</span>;
       default:
         return null;
     }
@@ -419,7 +419,7 @@ export default function BrandSettingsPage() {
                         <h3 className="text-lg font-bold text-secondary-900">Professional Plan</h3>
                         <p className="text-secondary-600">Billed monthly • Next payment: April 15, 2024</p>
                       </div>
-                      <span className="px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-full font-semibold">
+                      <span className="px-4 py-2 bg-gradient-to-r from-primary-600 to-primary-700 text-white rounded-lg font-semibold">
                         $149/month
                       </span>
                     </div>
@@ -475,7 +475,7 @@ export default function BrandSettingsPage() {
                           </div>
                           <div className="flex items-center space-x-4">
                             <span className="font-semibold text-secondary-900">{invoice.amount}</span>
-                            <span className="px-2 py-1 bg-green-100 text-green-800 text-sm rounded-full">
+                            <span className="px-2 py-1 bg-green-100 text-green-800 text-sm rounded-lg">
                               {invoice.status}
                             </span>
                             <Button size="sm" variant="outline">
@@ -681,7 +681,7 @@ export default function BrandSettingsPage() {
                             <div className="flex items-center space-x-2">
                               <h4 className="font-medium text-secondary-900">{session.device}</h4>
                               {session.current && (
-                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">Current</span>
+                                <span className="px-2 py-1 bg-green-100 text-green-800 text-xs rounded-lg">Current</span>
                               )}
                             </div>
                             <p className="text-sm text-secondary-600">{session.location} • {session.time}</p>
@@ -705,7 +705,7 @@ export default function BrandSettingsPage() {
                           Add an extra layer of security to your account
                         </p>
                       </div>
-                      <span className="px-3 py-1 bg-secondary-100 text-secondary-800 text-sm rounded-full">
+                      <span className="px-3 py-1 bg-secondary-100 text-secondary-800 text-sm rounded-lg">
                         Not Enabled
                       </span>
                     </div>

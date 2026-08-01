@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import AuthLayout from '@/components/auth/AuthLayout';
 import { AuthService } from '@/services/auth.service';
 import { getSupabase } from '@/lib/supabase/client';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = searchParams.get('redirect') || '/';
@@ -36,13 +37,13 @@ export default function LoginPage() {
         const role = await AuthService.getUserRole(supabaseUser.id);
         if (role === 'influencer') router.push(`/influencer/${supabaseUser.id}`);
         else if (role === 'brand') router.push(`/brand/${supabaseUser.id}`);
-        else if (role === 'admin') router.push('/admin/admin-001');
+        else if (role === 'admin') router.push(`/admin/${supabaseUser.id}`);
         else router.push('/');
       } else {
         router.push('/');
       }
     } else {
-      setError(result.error);
+      setError(result.error || 'An error occurred');
     }
     
     setLoading(false);
@@ -54,25 +55,22 @@ export default function LoginPage() {
 
     const result = await AuthService.loginWithGoogle('influencer');
     
-    if (result.success) {
-      router.push('/');
-    } else {
-      setError(result.error);
+    if (!result.success) {
+      setError(result.error || 'An error occurred');
     }
     
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-purple-50 to-white p-4">
-      <div className="max-w-md w-full">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 rounded-2xl mb-4">
-            <span className="text-3xl font-bold text-white font-montserrat">P</span>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900 font-montserrat">Welcome Back</h1>
-          <p className="text-gray-600 mt-2">Sign in to your PulseHub dashboard</p>
+    <AuthLayout>
+      <div className="text-center mb-8">
+        <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-r from-primary-600 to-accent-600 rounded-lg mb-4 lg:hidden">
+          <span className="text-3xl font-bold text-white font-sans">P</span>
         </div>
+        <h1 className="text-3xl font-bold text-gray-900 font-sans">Welcome Back</h1>
+        <p className="text-gray-600 mt-2">Sign in to your PulseHub dashboard</p>
+      </div>
 
         <Card className="p-8">
           {error && (
@@ -91,7 +89,7 @@ export default function LoginPage() {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="you@example.com"
                   required
                   disabled={loading}
@@ -107,7 +105,7 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                   placeholder="••••••••"
                   required
                   disabled={loading}
@@ -148,11 +146,18 @@ export default function LoginPage() {
 
           <div className="mt-8 text-center">
             <p className="text-gray-600">
-              Don't have an account? <Link href="/register" className="text-purple-600 hover:text-purple-800 font-medium">Sign up free</Link>
+              Don&apos;t have an account? <Link href="/register" className="text-primary-600 hover:text-primary-800 font-medium">Sign up for free trial</Link>
             </p>
           </div>
         </Card>
-      </div>
-    </div>
+    </AuthLayout>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }

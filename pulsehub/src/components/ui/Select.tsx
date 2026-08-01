@@ -17,7 +17,7 @@ export function Select({
   return (
     <div className="w-full">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-2 font-montserrat">
+        <label className="block text-sm font-medium text-gray-700 mb-2 font-sans">
           {label}
         </label>
       )}
@@ -25,7 +25,7 @@ export function Select({
         className={cn(
           'w-full px-4 py-3 border rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-200 transition-all duration-200 outline-none appearance-none',
           error ? 'border-error-500 focus:border-error-500 focus:ring-error-200' : 'border-gray-300',
-          'font-montserrat bg-white',
+          'font-sans bg-white',
           className
         )}
         {...props}
@@ -38,7 +38,7 @@ export function Select({
         ))}
       </select>
       {error && (
-        <p className="mt-2 text-sm text-error-600 font-montserrat">{error}</p>
+        <p className="mt-2 text-sm text-error-600 font-sans">{error}</p>
       )}
     </div>
   );

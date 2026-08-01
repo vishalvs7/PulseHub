@@ -35,7 +35,7 @@ export function Alert({ children, variant = 'info', className }: AlertProps) {
       )}
     >
       <Icon className="w-5 h-5 flex-shrink-0 mt-0.5" />
-      <div className="flex-1 font-montserrat text-sm">{children}</div>
+      <div className="flex-1 font-sans text-sm">{children}</div>
     </div>
   );
 }

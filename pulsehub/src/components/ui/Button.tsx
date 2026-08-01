@@ -30,7 +30,7 @@ export function Button({
     secondary: 'bg-white text-primary-600 border-2 border-primary-200 hover:bg-primary-50 shadow-sm hover:shadow',
     outline: 'border-2 border-gray-300 text-gray-700 hover:border-primary-500 hover:text-primary-600',
     ghost: 'text-gray-700 hover:bg-gray-100 hover:text-gray-900',
-    gradient: 'bg-gradient-to-r from-primary-600 to-pink-600 text-white hover:from-primary-700 hover:to-pink-700 shadow-md hover:shadow-lg',
+    gradient: 'bg-gradient-to-r from-primary-600 to-accent-600 text-white hover:from-primary-700 hover:to-accent-700 shadow-md hover:shadow-lg',
   };
 
   const sizes = {
@@ -48,7 +48,6 @@ export function Button({
         sizes[size],
         fullWidth && 'w-full',
         (disabled || loading) && 'opacity-50 cursor-not-allowed',
-        'font-montserrat',
         className
       )}
       disabled={disabled || loading}
