@@ -431,9 +431,18 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - 🟡 "Best Time to Post" + Comment-to-DM — demo/draft only (need analytics worker / DM-capable platform APIs)
 - 🟡 Marketplace search — ilike/contains + reach-tier facet (no FTS/Meilisearch)
 
+## Deployment (Vercel — Live)
+
+- **URL:** `https://prepost-app.vercel.app` (production). Note: `prepost.vercel.app` and `pulsehub.vercel.app` are both taken by other Vercel accounts/teams.
+- **Project:** `pulsehub` under team `amp-global`; `vercel.json` (Next.js framework, `npm run build`).
+- **Env vars pushed to Vercel (production):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_PROJECT_NUMBER`, `ZERNIO_API_KEY`. `VERCEL_TOKEN` is stored in local `.env.local` only (gitignored).
+- **Verified live:** homepage, register, login, pricing, tools all 200; register API creates auto-confirmed users; login → role dashboard redirect works; middleware protects `/influencer|brand|admin/[uid]` (307 → `/login?redirect=...`).
+- **Known deployment warning:** Next.js reports `middleware` file convention deprecated → use `proxy` instead (Next 16). Non-blocking; build succeeds.
+
 ## Next Steps
 
-1. Get explicit go-ahead on Zernio scope, then build cross-posting + unified inbox on it
+1. Migrate `src/middleware.ts` → `proxy` convention to clear the deployment warning
+2. Get explicit go-ahead on Zernio scope, then build cross-posting + unified inbox on it
 2. Set up real platform OAuth credentials (IG Graph, X, LinkedIn, Reddit) and app review
 3. Build the dual-pane composer + preview renderer (Feature 2)
 4. Build real-time chat (Supabase Realtime) + Deals state machine
