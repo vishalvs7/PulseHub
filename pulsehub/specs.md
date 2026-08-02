@@ -266,12 +266,15 @@ Implementation files: `src/services/social/{instagram,twitter,linkedin,reddit}.s
 - **Influencer Search:** directory for brands with filter facets — Reach Tier, Platform, Niche, Keyword search — via PostgreSQL Full-Text Search or Meilisearch.
 
 ### Feature 2: Interactive Cross-Posting Window & Multi-Platform Preview
-- **Dual-Pane Layout:**
-  - **Left Pane (Form Input):** media uploader (MP4 vertical/horizontal), main caption text box, platform-specific override fields (e.g., separate X post length trimmer, IG auto-first-comment hashtags field), and a dateTime scheduler.
-  - **Right Pane (Live UI Previews):** interactive tab switcher (`TikTok` | `Instagram Reels` | `YouTube Shorts` | `LinkedIn` | `X`).
+- **4-Step Wizard (`PostComposer.tsx`):**
+  1. **Content Type** — pick media format first: Square Image, Square Video, Vertical Short Video, Long Video, Document. Each card shows its aspect ratio as a dotted-line shape and which platforms support it (brand logos).
+  2. **Accounts & Text** — only platforms compatible with the chosen format are shown (e.g. vertical video → IG/TikTok/YouTube/FB; long video → no TikTok; document → LinkedIn/X/FB/Reddit). Upload media (type-restricted), write caption, toggle accounts; each selected platform shows its derived destination ("as Reel" / "as Shorts" / "as Video").
+  3. **Preview** — live native-looking mock frames per selected platform (`PlatformPreviews.tsx`): IG feed card, TikTok 9:16 with action rail, YouTube thumbnail with Shorts badge, LinkedIn document card, X, FB, Threads, Pinterest, Reddit.
+  4. **Schedule** — Post Now or Schedule Later (date + time).
+- **Destination derivation:** content type drives per-platform destination (`postFormats.ts`), e.g. vertical short video + YouTube → **YouTube Shorts**; + Instagram → **Reel**. Stored in `posts.content_type` and `post_target_formats`, forwarded to Zernio as `platformSpecificData`.
 - **Preview Rendering Engine:**
-  - Custom CSS/SVG mobile device wrappers simulating native overlays (TikTok side icons, IG Reel bottom overlays) over the uploaded video (`object-fit: cover`).
-  - Real-time character limit validation (e.g., auto-warning badge when X exceeds 280 characters).
+  - Custom CSS/SVG platform mock frames simulating native overlays (TikTok side icons, IG bottom overlays) over the uploaded media (`object-fit: cover`).
+  - Real-time character limit validation per platform (warning when X exceeds 280 chars, etc.).
 
 ### Feature 3: In-App Direct Messaging & Campaign Workspace
 - Real-time messaging bound by a **`Deals` / `Inquiries` state machine** (`PENDING` → `OFFER_SENT` → `ACCEPTED` → `COMPLETED`).
@@ -329,9 +332,9 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 
 ## 5. Immediate Next Execution Tasks
 
-1. Draft complete PostgreSQL schema (DDL) for Supabase: `profiles`, `brand_profiles`, `influencer_profiles`, `posts`, `post_targets`, `deals`, `messages`, with all RLS policies.
-2. Build the Next.js `SchedulePostForm` component + platform-native CSS Live Preview container.
-3. Set up API routing for multi-platform publishing using a unified payload interface.
+1. Add scheduled-posts management UI (list/view/cancel) + Zernio sync/status polling.
+2. Build real-time deal-based chat (Supabase Realtime) with the `deals` state machine + anti-leakage sanitization.
+3. Wire per-platform posting adapters for scheduled (non-now) delivery and destination-specific formatting (Shorts/Reel) as Zernio supports them.
 
 ## 6. Implementation Status vs Spec (Gap Analysis)
 
@@ -344,10 +347,11 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 | Influencer **reach tier** (Nano/Micro/Mid/Macro) | ✅ Done (generated column from `followers_count`, tier filter in marketplace) |
 | Influencer **base sponsorship rates** | ✅ Done (`base_rate_min`/`base_rate_max`/`base_rate_currency`; marketplace uses them with heuristic fallback) |
 | Influencer search facets (niche, followers, keyword) | 🟡 Partial (ilike/contains filters + reach-tier facet; no FTS/Meilisearch) |
-| Cross-posting **dual-pane preview engine** | ❌ Missing (composer is a single basic form) |
-| Platform-native preview tab switcher + CSS overlays | ❌ Missing |
-| Character-limit validation / safe-zone overlays | ❌ Missing |
-| Media **uploader** (video/asset → S3/Storage signed URL) | ❌ Missing (media URL is a text field only) |
+| Cross-posting **4-step wizard composer** (content type → accounts → preview → schedule) | ✅ Done (`PostComposer.tsx` — steps: media format, eligible-account picker, live previews, schedule) |
+| Platform-native preview frames + CSS overlays | ✅ Done (`PlatformPreviews.tsx` — IG/X/LinkedIn/TikTok/YouTube/FB/Threads/Pinterest/Reddit mock frames) |
+| Content-type → platform targeting (e.g. vertical video → IG Reel / TikTok / YouTube Shorts) | ✅ Done (`postFormats.ts` — 5 content types, eligibility per type, derived per-platform destination) |
+| Media **uploader** (video/asset → Supabase Storage signed URL) | ✅ Done (`/api/social/zernio/upload`, `post-media` bucket) |
+| Character-limit validation | ✅ Done (per-platform char counters in Step 2) |
 | `post_targets` table (per-platform post status) | ✅ Done (table + RLS; `posting.service` writes/updates targets per platform) |
 | Deals/Inquiries state machine + `deals` table | ❌ Missing (`campaigns.status` exists, different model) |
 | Real-time chat (Supabase Realtime) | ❌ Missing (inbox is placeholder UI) |
@@ -356,8 +360,9 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 | Unified analytics pipeline (cron poll 6–12h) | ❌ Missing (snapshots exist, no worker) |
 | Unified **`views`** metric normalization | ❌ Missing (`analytics_snapshots` has reach/impressions only) |
 | Social OAuth connect (IG/Twitter/LinkedIn) | 🟡 Scaffolded (OAuth service + connect/callback routes; needs app credentials + app review) |
-| Social middleware aggregator (Zernio/Postproxy/Phyllo) | ❌ Missing (direct OAuth today) |
+| Social middleware aggregator (Zernio) | ✅ Done (Zernio service + cross-posting live via Zernio API; upload, connect, sync, posts routes) |
 | Shadcn UI | ❌ Using custom UI components |
+| Brand logos in UI (react-icons) | ✅ Done (`BrandIcon.tsx` — real SVG logos across composer/sidebar) |
 | 5.1 Rate & ROI Calculator | ✅ Done (`/tools/rate-calculator`, `RateCalculator.tsx`) |
 | 5.2 Caption Trimmer & Thread Splitter | ✅ Done (`/tools/thread-splitter`, `ThreadSplitter.tsx`) |
 | 5.3 Character & Hashtag Counter | ✅ Done (`/tools/char-counter`, `CharCounter.tsx`, shared `socialLimits.ts`) |
@@ -365,7 +370,7 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 | 5.5 Comment-to-DM automation | 🟡 Done as draft builder (saved to localStorage; needs DM-capable platform APIs) — `/brand/[uid]/comment-to-dm` |
 | Creator Academy (docs + sidebar) | ✅ Done (`/academy`, `/academy/[slug]`, 4 modules / 13 docs, docs-style layout) |
 
-**Overall alignment: the foundation (~50%) is in place** — auth/RBAC, both profile tables (incl. reach tier + base rates), RLS, campaigns, marketplace search (incl. reach-tier facet), `post_targets`, analytics schema, OAuth scaffolding, all five growth micro-tools, and the Creator Academy are built. The remaining headline features (preview engine, real-time deal-based chat, analytics pipeline, social aggregator) are still unbuilt.
+**Overall alignment: the foundation (~65%) is in place** — auth/RBAC, both profile tables (incl. reach tier + base rates), RLS, campaigns, marketplace search (incl. reach-tier facet), `post_targets`, analytics schema, OAuth scaffolding, all five growth micro-tools, the Creator Academy, plus the flagship **cross-posting wizard** (content-type targeting → eligible accounts → live platform previews → scheduling) on the Zernio aggregator. The remaining headline features (real-time deal-based chat, analytics pipeline, native OAuth posting without Zernio) are still unbuilt.
 
 **Closest wins:** All five micro-tools (5.1–5.5) are now shipped and client-side. 5.4 needs Feature 4's analytics worker for real audience metrics; 5.5 needs DM-capable platform integrations (Instagram/Facebook/TikTok), which the spec defers to the social middleware aggregator.
 
@@ -417,14 +422,16 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - ✅ AI content generation (Groq + Gemini, single & platforms modes)
 - ✅ Mobile-first responsive UI (drawer sidebar, hamburger nav)
 - ✅ Pricing page, Creator Academy, all 5 growth micro-tools
+- ✅ **Cross-posting wizard** (4 steps: content type → accounts → preview → schedule) on Zernio aggregator
+- ✅ **Unified comment inbox** (long-card UI, search, platform filters, inline replies, RLS policies + 12 seeded comments)
+- ✅ **Comment-to-DM** automation with link **and document (PDF/DOCX) sharing**
+- ✅ Auth deadlock fix (pages load on full reload); users-readable RLS policy (no more 406s on deals)
 - ✅ `npm run build` passes
 
 ## What's Not Working / Not Built
 
-- ❌ **Zernio integration** — key in env only; cross-posting engine + unified inbox not built (user paused this)
-- ❌ **Platform OAuth connect** (IG/Twitter/LinkedIn/Reddit) — service + routes scaffolded, but no app credentials / app review yet; no real platform posting
-- ❌ **Preview engine** (dual-pane composer + platform-native CSS overlays) — composer is a single basic form
-- ❌ **Media uploader** (video → S3/Supabase Storage) — media URL is a text field only
+- ❌ **Platform OAuth connect** (IG/Twitter/LinkedIn/Reddit) — service + routes scaffolded, but no app credentials / app review yet; posting currently routes through Zernio aggregator
+- ❌ **Zernio scheduling polish** — cross-posting works via Zernio; scheduled posting and per-destination (Shorts/Reel) behavior depend on Zernio capabilities
 - ❌ **Real-time deal-based chat** + anti-leakage sanitization — inbox is placeholder UI
 - ❌ **Unified analytics pipeline** (cron 6–12h) + unified `views` metric — snapshots exist, no worker
 - ❌ **Admin panel** — no admin dashboard page
@@ -440,12 +447,20 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - **Verified live:** homepage, register, login, pricing, tools all 200; register API creates auto-confirmed users; login → role dashboard redirect works; middleware protects `/influencer|brand|admin/[uid]` (307 → `/login?redirect=...`).
 - **Known deployment warning:** Next.js reports `middleware` file convention deprecated → use `proxy` instead (Next 16). Non-blocking; build succeeds.
 
+## Recent Session (Cross-Posting Wizard + Posting UX)
+
+- **4-step wizard composer** replacing the single-form composer: content type → accounts & text → preview → schedule. Content types (square image/video, vertical short video, long video, document) drive platform eligibility and per-platform destination (IG Reel, YouTube Shorts, TikTok Video, etc.).
+- **New files:** `src/lib/postFormats.ts` (content-type config + eligibility + destination map), `src/components/posting/AspectShape.tsx` (dotted-line dimension shapes), `src/components/posting/BrandIcon.tsx` (react-icons brand logos), `src/components/posting/PlatformPreviews.tsx` (per-platform mock frames).
+- **Migration `00007_post_formats.sql` applied live:** `posts.content_type` column + `post_target_formats` table (post_id/platform/destination) with RLS + policies + index.
+- **API:** `/api/social/zernio/posts` now accepts `contentType` + per-platform `destination`, persists both, forwards destination to Zernio as `platformSpecificData`.
+- **UI polish:** step-1 cards show dotted aspect shapes + real brand logos (react-icons, incl. TikTok/Threads/Pinterest/Reddit not in lucide); brand logos reused across step-2 platform picker, char counters, preview headers; sidebar "Connections" tab renamed to **"Accounts"**.
+- **Verified headless:** per-type platform filtering (document → LinkedIn/X/FB/Reddit; long video → no TikTok; vertical → IG/TikTok/YouTube/FB), destination badges, preview frames, schedule step; `npm run build` green; production responding 200 after auto-deploy.
+
 ## Next Steps
 
 1. Migrate `src/middleware.ts` → `proxy` convention to clear the deployment warning
-2. Get explicit go-ahead on Zernio scope, then build cross-posting + unified inbox on it
 2. Set up real platform OAuth credentials (IG Graph, X, LinkedIn, Reddit) and app review
-3. Build the dual-pane composer + preview renderer (Feature 2)
+3. Add per-account scheduling UI (list/view/cancel scheduled posts) + sync status from Zernio
 4. Build real-time chat (Supabase Realtime) + Deals state machine
 5. Build the analytics worker/cron for live metrics
 6. Build the admin panel
