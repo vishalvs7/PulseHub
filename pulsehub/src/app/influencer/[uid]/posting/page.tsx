@@ -4,7 +4,7 @@ import { useParams } from 'next/navigation';
 import PostComposer from '@/components/posting/PostComposer';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 
-export default function BrandPostingPage() {
+export default function InfluencerPostingPage() {
   const params = useParams();
   const uid = params.uid as string;
 
@@ -16,7 +16,7 @@ export default function BrandPostingPage() {
           Write once, publish everywhere. Connect accounts first, then create a cross-platform post.
         </p>
       </div>
-      <PostComposer userId={uid} connectionsHref={`/brand/${uid}/connections`} />
+      <PostComposer userId={uid} connectionsHref={`/influencer/${uid}/connections`} />
       <Card>
         <CardHeader>
           <CardTitle>Recent Posts</CardTitle>

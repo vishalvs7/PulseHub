@@ -45,13 +45,17 @@ interface SidebarProps {
 
 function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
   const base = `/${type}/${uid}`;
+  const newPost = { name: 'New Post', href: `${base}/posting`, icon: Send };
+  const connections = { name: 'Connections', href: `${base}/connections`, icon: Users };
+
   if (type === 'brand') {
     return [
       { name: 'Dashboard', href: base, icon: LayoutDashboard },
+      { name: 'New Post', href: newPost.href, icon: newPost.icon },
+      { name: 'Connections', href: connections.href, icon: connections.icon },
       { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
       { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
       { name: 'Campaigns', href: `${base}/campaigns`, icon: Megaphone },
-      { name: 'Posting', href: `${base}/posting`, icon: Send },
       { name: 'Inbox', href: `${base}/inbox`, icon: Inbox },
       { name: 'Marketplace', href: `${base}/marketplace`, icon: Users },
       { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
@@ -63,9 +67,10 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
   }
   return [
     { name: 'Dashboard', href: base, icon: LayoutDashboard },
+    { name: 'New Post', href: newPost.href, icon: newPost.icon },
+    { name: 'Connections', href: connections.href, icon: connections.icon },
     { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
     { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
-    { name: 'Connections', href: `${base}/connections`, icon: Users },
     { name: 'Profile', href: `${base}/profile`, icon: UserCircle },
     { name: 'Inbox', href: `${base}/inbox`, icon: Inbox },
     { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
