@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
   ImagePlus, Send, Calendar, Clock, Zap, Link2, X, Loader2, ChevronLeft, ChevronRight,
-  Image as ImageIcon, Video, FileText, Check, Smartphone, Clock4,
+  FileText, Check, Smartphone, Clock4,
 } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase/client';
 import { PLATFORM_CONFIGS, PLATFORM_LIST } from '@/lib/socialPlatforms';
@@ -14,6 +14,8 @@ import { CONTENT_TYPES } from '@/lib/postFormats';
 import type { PostContentType } from '@/lib/postFormats';
 import PlatformPreviews from './PlatformPreviews';
 import type { PlatformPreviewProps } from './PlatformPreviews';
+import AspectShape from './AspectShape';
+import BrandIcon from './BrandIcon';
 
 interface ConnectedAccount {
   platform: string;
@@ -26,14 +28,6 @@ interface PostComposerProps {
 }
 
 const STEPS = ['Content Type', 'Accounts & Text', 'Preview', 'Schedule'] as const;
-
-const TYPE_ICONS: Record<PostContentType, React.ComponentType<{ className?: string }>> = {
-  'square-image': ImageIcon,
-  'square-video': Video,
-  'vertical-video': Video,
-  'long-video': Video,
-  document: FileText,
-};
 
 export default function PostComposer({ userId, connectionsHref }: PostComposerProps) {
   const [step, setStep] = useState(0);
@@ -243,41 +237,30 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
             <p className="text-sm text-secondary-500 mb-4">
               Pick the media format first — only compatible platforms will be shown.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
               {CONTENT_TYPES.map((t) => {
-                const Icon = TYPE_ICONS[t.id];
                 const isSelected = contentType === t.id;
                 return (
                   <button
                     key={t.id}
                     onClick={() => selectType(t.id)}
-                    className={`p-4 rounded-xl border text-left transition ${
+                    className={`p-5 rounded-2xl border-2 transition flex flex-col items-center text-center ${
                       isSelected
-                        ? 'border-primary-500 bg-primary-50 ring-2 ring-primary-200'
-                        : 'border-secondary-300 hover:border-primary-300'
+                        ? 'border-primary-500 bg-primary-50 shadow-md'
+                        : 'border-secondary-200 bg-white hover:border-primary-300 hover:shadow-sm'
                     }`}
                   >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`w-9 h-9 rounded-lg flex items-center justify-center ${
-                        isSelected ? 'bg-primary-600 text-white' : 'bg-secondary-100 text-secondary-500'
-                      }`}>
-                        <Icon className="w-4 h-4" />
-                      </span>
-                      <span className="text-xs font-bold px-2 py-1 rounded bg-secondary-100 text-secondary-600">
-                        {t.aspect}
-                      </span>
-                    </div>
-                    <p className="font-bold text-secondary-900">{t.name}</p>
-                    <p className="text-xs text-secondary-500 mt-0.5">{t.description}</p>
-                    <div className="flex flex-wrap gap-1 mt-2">
-                      {t.platforms.map((p) => {
-                        const cfg = PLATFORM_CONFIGS[p];
-                        return (
-                          <span key={p} className={`px-1.5 py-0.5 rounded text-[9px] font-bold bg-gradient-to-r ${cfg.color} text-white`}>
-                            {cfg.icon}
-                          </span>
-                        );
-                      })}
+                    <AspectShape type={t.id} selected={isSelected} />
+                    <p className={`font-bold mt-2 ${isSelected ? 'text-primary-700' : 'text-secondary-900'}`}>
+                      {t.name}
+                    </p>
+                    <p className="text-[11px] text-secondary-500 mt-0.5 leading-snug line-clamp-2">
+                      {t.description}
+                    </p>
+                    <div className="flex flex-wrap justify-center gap-1.5 mt-3">
+                      {t.platforms.map((p) => (
+                        <BrandIcon key={p} platform={p} className="w-6 h-6 rounded-md" />
+                      ))}
                     </div>
                   </button>
                 );
@@ -387,9 +370,7 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
                       }`}
                     >
                       <span className="flex items-center space-x-3">
-                        <span className={`w-8 h-8 bg-gradient-to-r ${p.color} rounded-lg flex items-center justify-center text-white text-xs font-bold`}>
-                          {p.icon}
-                        </span>
+                        <BrandIcon platform={p.id} className="w-8 h-8 rounded-lg" />
                         <span className="flex flex-col items-start">
                           <span className="text-sm font-medium text-secondary-900">{p.name}</span>
                           {isSelected && destination && (
@@ -426,8 +407,9 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
                     const cfg = PLATFORM_CONFIGS[id];
                     const status = content.length <= cfg.maxChars ? 'ok' : content.length > cfg.maxChars ? 'over' : 'near';
                     return (
-                      <span key={id} className="flex items-center space-x-1 text-xs">
-                        <span className={`font-medium ${cfg.color.split(' ')[0]} bg-clip-text text-transparent`}>{cfg.name}</span>
+                      <span key={id} className="flex items-center space-x-1.5 text-xs">
+                        <BrandIcon platform={id} className="w-4 h-4 rounded" />
+                        <span className="font-medium text-secondary-700">{cfg.name}</span>
                         <span className={charState(cfg.maxChars)}>
                           {content.length}/{cfg.maxChars}
                         </span>

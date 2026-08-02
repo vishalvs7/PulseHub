@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Heart, MessageCircle, Share2, Bookmark, Repeat2, Play, ThumbsUp } from 'lucide-react';
-import { PLATFORM_CONFIGS } from '@/lib/socialPlatforms';
+import BrandIcon from './BrandIcon';
 import type { CrossPostPlatform } from '@/lib/socialPlatforms';
 
 export interface PreviewMedia {
@@ -323,14 +323,13 @@ export default function PlatformPreviews({ items }: { items: PlatformPreviewProp
       {items.map((item) => {
         const Frame = FRAMES[item.platform];
         if (!Frame) return null;
-        const cfg = PLATFORM_CONFIGS[item.platform];
         return (
           <div key={item.platform} className="flex flex-col items-center gap-1.5">
             <div className="flex items-center gap-1.5">
-              <span className={`w-5 h-5 bg-gradient-to-r ${cfg.color} rounded-md flex items-center justify-center text-[8px] font-bold text-white`}>
-                {cfg.icon}
+              <BrandIcon platform={item.platform} className="w-5 h-5 rounded-md" />
+              <span className="text-xs font-semibold text-secondary-700">
+                {item.platform.charAt(0).toUpperCase() + item.platform.slice(1)}
               </span>
-              <span className="text-xs font-semibold text-secondary-700">{cfg.name}</span>
               <span className="px-1.5 py-0.5 bg-primary-50 text-primary-700 text-[9px] font-bold rounded">
                 {item.destination}
               </span>

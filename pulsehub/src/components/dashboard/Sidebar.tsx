@@ -45,7 +45,7 @@ interface SidebarProps {
 function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
   const base = `/${type}/${uid}`;
   const newPost = { name: 'New Post', href: `${base}/posting`, icon: Send };
-  const connections = { name: 'Connections', href: `${base}/connections`, icon: Users };
+  const connections = { name: 'Accounts', href: `${base}/connections`, icon: Users };
   const deals = { name: 'Deals', href: `${base}/deals`, icon: MessageSquare };
 
   if (type === 'brand') {
@@ -55,7 +55,7 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
       { name: 'Explore Influencers', href: `${base}/explore`, icon: Users },
       { name: 'Deals', href: deals.href, icon: deals.icon },
       { name: 'Comments', href: `${base}/comments`, icon: MessageSquare },
-      { name: 'Connections', href: connections.href, icon: connections.icon },
+      { name: connections.name, href: connections.href, icon: connections.icon },
       { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
       { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
       { name: 'Campaigns', href: `${base}/campaigns`, icon: Megaphone },
@@ -71,7 +71,7 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
     { name: 'New Post', href: newPost.href, icon: newPost.icon },
     { name: 'Deals', href: deals.href, icon: deals.icon },
     { name: 'Comments', href: `${base}/comments`, icon: MessageSquare },
-    { name: 'Connections', href: connections.href, icon: connections.icon },
+    { name: connections.name, href: connections.href, icon: connections.icon },
     { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
     { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
     { name: 'Profile', href: `${base}/profile`, icon: UserCircle },
