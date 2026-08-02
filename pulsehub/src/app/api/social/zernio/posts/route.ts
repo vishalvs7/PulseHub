@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
 import { CROSSPOST_PLATFORMS } from '@/lib/socialPlatforms';
+import { CONTENT_TYPE_CONFIGS } from '@/lib/postFormats';
 import type { CrossPostPlatform } from '@/lib/socialPlatforms';
+import type { PostContentType } from '@/lib/postFormats';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,9 +12,10 @@ export const dynamic = 'force-dynamic';
 interface CreatePostBody {
   content: string;
   mediaUrls?: string[];
-  platforms: { platform: CrossPostPlatform; customContent?: string }[];
+  platforms: { platform: CrossPostPlatform; customContent?: string; destination?: string }[];
   scheduledFor?: string; // ISO string, optional → publish now
   timezone?: string;
+  contentType?: PostContentType;
 }
 
 export async function POST(req: NextRequest) {
@@ -35,6 +38,10 @@ export async function POST(req: NextRequest) {
       if (!CROSSPOST_PLATFORMS.includes(t.platform)) {
         return NextResponse.json({ error: `Unsupported platform: ${t.platform}` }, { status: 400 });
       }
+    }
+
+    if (body.contentType && !CONTENT_TYPE_CONFIGS[body.contentType]) {
+      return NextResponse.json({ error: `Unsupported content type: ${body.contentType}` }, { status: 400 });
     }
 
     const admin = getAdmin();
@@ -74,6 +81,7 @@ export async function POST(req: NextRequest) {
         platform: t.platform,
         accountId: accountByPlatform.get(t.platform)!,
         ...(t.customContent ? { customContent: t.customContent } : {}),
+        platformSpecificData: t.destination ? { destination: t.destination } : undefined,
       }));
 
     const missing = targets.filter((t) => !accountByPlatform.has(t.platform)).map((t) => t.platform);
@@ -109,6 +117,7 @@ export async function POST(req: NextRequest) {
         platform: zernioPlatforms.map((p) => p.platform).join(','),
         content,
         media_urls: mediaUrls,
+        content_type: body.contentType || null,
         status: publishNow ? 'scheduled' : status,
         scheduled_for: body.scheduledFor || null,
       })
@@ -133,6 +142,20 @@ export async function POST(req: NextRequest) {
 
     if (targetsError) {
       return NextResponse.json({ error: `Post sent to Zernio but targets save failed: ${targetsError.message}` }, { status: 500 });
+    }
+
+    const destinationRows = zernioPlatforms
+      .filter((p) => p.platformSpecificData?.destination)
+      .map((p) => ({
+        post_id: post.id,
+        platform: p.platform,
+        destination: p.platformSpecificData!.destination as string,
+      }));
+    if (destinationRows.length > 0) {
+      const { error: destError } = await admin.from('post_target_formats').insert(destinationRows);
+      if (destError) {
+        return NextResponse.json({ error: `Post sent but destinations save failed: ${destError.message}` }, { status: 500 });
+      }
     }
 
     return NextResponse.json({
