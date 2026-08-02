@@ -1,7 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MessageSquare, Plus, Trash2, Power, Link2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { MessageSquare, Plus, Trash2, Power, Link2, AlertCircle, CheckCircle2, FileText, X } from 'lucide-react';
+
+interface SharedDocument {
+  name: string;
+  dataUrl: string;
+}
 
 interface TriggerRule {
   id: string;
@@ -9,6 +14,7 @@ interface TriggerRule {
   keyword: string;
   message: string;
   link: string;
+  document?: SharedDocument;
   active: boolean;
 }
 
@@ -30,19 +36,49 @@ function loadRules(): TriggerRule[] {
   }
 }
 
+const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export default function CommentToDM() {
   const [rules, setRules] = useState<TriggerRule[]>(() => loadRules());
   const [platform, setPlatform] = useState('instagram');
   const [keyword, setKeyword] = useState('');
   const [message, setMessage] = useState('');
   const [link, setLink] = useState('');
+  const [document, setDocument] = useState<SharedDocument | undefined>();
   const [saved, setSaved] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (rules.length > 0) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(rules));
     }
   }, [rules]);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > MAX_DOCUMENT_BYTES) {
+      alert('Document must be under 5MB.');
+      e.target.value = '';
+      return;
+    }
+    const dataUrl = await fileToDataUrl(file);
+    setDocument({ name: file.name, dataUrl });
+  };
+
+  const clearDocument = () => {
+    setDocument(undefined);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   const addRule = () => {
     if (!keyword.trim() || !message.trim()) return;
@@ -52,12 +88,15 @@ export default function CommentToDM() {
       keyword: keyword.trim(),
       message: message.trim(),
       link: link.trim(),
+      document,
       active: true,
     };
     setRules((r) => [rule, ...r]);
     setKeyword('');
     setMessage('');
     setLink('');
+    setDocument(undefined);
+    if (fileInputRef.current) fileInputRef.current.value = '';
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
@@ -133,6 +172,42 @@ export default function CommentToDM() {
                 />
               </div>
             </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Document to share <span className="font-normal text-gray-400">(optional, PDF/DOCX up to 5MB)</span>
+              </label>
+              {document ? (
+                <div className="flex items-center justify-between gap-2 px-4 py-3 bg-primary-50 border border-primary-200 rounded-lg">
+                  <span className="inline-flex items-center gap-2 text-sm text-primary-700 min-w-0">
+                    <FileText className="w-4 h-4 shrink-0" />
+                    <span className="truncate">{document.name}</span>
+                  </span>
+                  <button
+                    onClick={clearDocument}
+                    className="text-gray-400 hover:text-red-500 transition"
+                    title="Remove document"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center px-4 py-6 border-2 border-dashed border-gray-300 rounded-lg text-center">
+                  <div>
+                    <FileText className="w-6 h-6 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500 mb-3">
+                      Attach a PDF, Word doc, or text file to auto-send in the DM.
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.txt,.xls,.xlsx,.csv"
+                      onChange={handleFileChange}
+                      className="text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-primary-100 file:text-primary-700 file:font-semibold file:cursor-pointer hover:file:bg-primary-200"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={addRule}
               disabled={!keyword.trim() || !message.trim()}
@@ -185,6 +260,15 @@ export default function CommentToDM() {
                     <p className="text-xs text-primary-600 mt-1 truncate flex items-center gap-1">
                       <Link2 className="w-3 h-3" /> {rule.link}
                     </p>
+                  )}
+                  {rule.document && (
+                    <a
+                      href={rule.document.dataUrl}
+                      download={rule.document.name}
+                      className="text-xs text-primary-600 mt-1 inline-flex items-center gap-1 hover:underline"
+                    >
+                      <FileText className="w-3 h-3" /> {rule.document.name}
+                    </a>
                   )}
                 </div>
               ))}

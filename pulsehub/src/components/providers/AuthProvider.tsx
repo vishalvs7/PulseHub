@@ -37,11 +37,11 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       const { data: { session } } = await supabase.auth.getSession();
       const currentUser = session?.user || null;
       setUser(currentUser);
-      
+
       if (currentUser) {
-        await fetchUserData(currentUser.id);
+        fetchUserData(currentUser.id);
       }
-      
+
       setLoading(false);
     };
 
@@ -51,13 +51,13 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       async (event: AuthChangeEvent, session: Session | null) => {
         const currentUser = session?.user || null;
         setUser(currentUser);
-        
+
         if (currentUser) {
-          await fetchUserData(currentUser.id);
+          fetchUserData(currentUser.id);
         } else {
           setUserData(null);
         }
-        
+
         setLoading(false);
       }
     );

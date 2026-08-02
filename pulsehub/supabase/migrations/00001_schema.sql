@@ -236,6 +236,10 @@ create policy "Users can read own data"
   on public.users for select
   using (id = auth_user_id());
 
+create policy "Authenticated users can read all users"
+  on public.users for select
+  using (auth.uid() is not null);
+
 create policy "Admins can read all users"
   on public.users for select
   using (public.is_admin());
@@ -295,16 +299,42 @@ create policy "Users can delete own social accounts"
   on public.social_accounts for delete
   using (user_id = auth_user_id());
 
+-- Helper: is the current user a campaign participant? (security definer to avoid RLS recursion)
+create or replace function public.is_campaign_participant(p_campaign_id uuid)
+returns boolean
+language sql
+stable
+security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.campaign_influencers ci
+    where ci.campaign_id = p_campaign_id and ci.influencer_id = auth.uid()
+  ) or exists (
+    select 1 from public.campaigns c
+    where c.id = p_campaign_id and c.brand_id = auth.uid()
+  )
+$$;
+
+-- Helper: is the current user a conversation participant? (security definer to avoid RLS recursion)
+create or replace function public.is_conversation_participant(p_conversation_id uuid)
+returns boolean
+language sql
+stable
+security definer set search_path = ''
+as $$
+  select exists (
+    select 1 from public.conversation_participants cp
+    where cp.conversation_id = p_conversation_id and cp.user_id = auth.uid()
+  )
+$$;
+
 -- Campaigns: brand owners can CRUD, influencers can read joined
 create policy "Brands can read own campaigns"
   on public.campaigns for select
   using (
     brand_id = auth_user_id()
-    or exists (
-      select 1 from public.campaign_influencers
-      where campaign_id = id and influencer_id = auth_user_id()
-    )
-    or exists (select 1 from public.users where id = auth_user_id() and role = 'admin')
+    or public.is_campaign_participant(id)
+    or public.is_admin()
   );
 
 create policy "Brands can insert campaigns"
@@ -324,8 +354,8 @@ create policy "Brands can delete own campaigns"
 create policy "Campaign influencers readable by participants"
   on public.campaign_influencers for select
   using (
-    exists (select 1 from public.campaigns where id = campaign_id and brand_id = auth_user_id())
-    or influencer_id = auth_user_id()
+    influencer_id = auth_user_id()
+    or public.is_campaign_participant(campaign_id)
   );
 
 create policy "Brands can manage campaign influencers"
@@ -358,11 +388,8 @@ create policy "Participants can create conversations"
 create policy "Participants can read conversation participants"
   on public.conversation_participants for select
   using (
-    exists (
-      select 1 from public.conversation_participants cp
-      where cp.conversation_id = conversation_id and cp.user_id = auth_user_id()
-    )
-    or user_id = auth_user_id()
+    user_id = auth_user_id()
+    or public.is_conversation_participant(conversation_id)
   );
 
 create policy "Users can insert participants"

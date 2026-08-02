@@ -6,24 +6,42 @@
 -- Note: In Supabase, auth.users inserts require service_role.
 -- Use the Supabase Dashboard SQL editor or run via admin API.
 -- These IDs are deterministic for reproducibility.
+-- Password: password123 (bcrypt cost 10, matching GoTrue requirements)
 
-insert into auth.users (id, email, encrypted_password, email_confirmed_at, raw_user_meta_data, created_at, updated_at)
+insert into auth.users (instance_id, id, aud, role, email, encrypted_password, email_confirmed_at, confirmed_at, raw_app_meta_data, raw_user_meta_data, is_sso_user, is_anonymous, created_at, updated_at)
 values
-  ('a0000000-0000-0000-0000-000000000001', 'sarah@example.com', crypt('password123', gen_salt('bf')), now(),
-   '{"display_name": "Sarah Chen", "role": "influencer"}', now(), now()),
-  ('a0000000-0000-0000-0000-000000000002', 'mike@example.com', crypt('password123', gen_salt('bf')), now(),
-   '{"display_name": "Mike Rossi", "role": "influencer"}', now(), now()),
-  ('a0000000-0000-0000-0000-000000000003', 'lena@example.com', crypt('password123', gen_salt('bf')), now(),
-   '{"display_name": "Lena Beauty", "role": "influencer"}', now(), now()),
-  ('a0000000-0000-0000-0000-000000000004', 'tech@example.com', crypt('password123', gen_salt('bf')), now(),
-   '{"display_name": "TechGuru", "role": "influencer"}', now(), now()),
-  ('a0000000-0000-0000-0000-000000000005', 'fit@example.com', crypt('password123', gen_salt('bf')), now(),
-   '{"display_name": "FitnessFanatic", "role": "influencer"}', now(), now()),
-  ('b0000000-0000-0000-0000-000000000001', 'brand@acme.com', crypt('password123', gen_salt('bf')), now(),
-   '{"display_name": "Acme Corp", "role": "brand"}', now(), now()),
-  ('b0000000-0000-0000-0000-000000000002', 'hello@novabrand.com', crypt('password123', gen_salt('bf')), now(),
-   '{"display_name": "Nova Brand", "role": "brand"}', now(), now())
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'sarah@example.com', '$2a$10$d2UanYyV6GnFuT7fV7T1CeOH6Hgdny9X9y0MjxuR1ALl6oTnOyWCO', now(), now(), '{"provider":"email","providers":["email"]}', '{"display_name": "Sarah Chen", "role": "influencer", "email_verified": true}', false, false, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'mike@example.com', '$2a$10$d2UanYyV6GnFuT7fV7T1CeOH6Hgdny9X9y0MjxuR1ALl6oTnOyWCO', now(), now(), '{"provider":"email","providers":["email"]}', '{"display_name": "Mike Rossi", "role": "influencer", "email_verified": true}', false, false, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'authenticated', 'authenticated', 'lena@example.com', '$2a$10$d2UanYyV6GnFuT7fV7T1CeOH6Hgdny9X9y0MjxuR1ALl6oTnOyWCO', now(), now(), '{"provider":"email","providers":["email"]}', '{"display_name": "Lena Beauty", "role": "influencer", "email_verified": true}', false, false, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000004', 'authenticated', 'authenticated', 'tech@example.com', '$2a$10$d2UanYyV6GnFuT7fV7T1CeOH6Hgdny9X9y0MjxuR1ALl6oTnOyWCO', now(), now(), '{"provider":"email","providers":["email"]}', '{"display_name": "TechGuru", "role": "influencer", "email_verified": true}', false, false, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000005', 'authenticated', 'authenticated', 'fit@example.com', '$2a$10$d2UanYyV6GnFuT7fV7T1CeOH6Hgdny9X9y0MjxuR1ALl6oTnOyWCO', now(), now(), '{"provider":"email","providers":["email"]}', '{"display_name": "FitnessFanatic", "role": "influencer", "email_verified": true}', false, false, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'b0000000-0000-0000-0000-000000000001', 'authenticated', 'authenticated', 'brand@acme.com', '$2a$10$d2UanYyV6GnFuT7fV7T1CeOH6Hgdny9X9y0MjxuR1ALl6oTnOyWCO', now(), now(), '{"provider":"email","providers":["email"]}', '{"display_name": "Acme Corp", "role": "brand", "email_verified": true}', false, false, now(), now()),
+  ('00000000-0000-0000-0000-000000000000', 'b0000000-0000-0000-0000-000000000002', 'authenticated', 'authenticated', 'hello@novabrand.com', '$2a$10$d2UanYyV6GnFuT7fV7T1CeOH6Hgdny9X9y0MjxuR1ALl6oTnOyWCO', now(), now(), '{"provider":"email","providers":["email"]}', '{"display_name": "Nova Brand", "role": "brand", "email_verified": true}', false, false, now(), now())
 on conflict (id) do nothing;
+
+-- Auth identities (required by GoTrue for password login)
+insert into auth.identities (id, user_id, provider, provider_id, identity_data, email, last_sign_in_at, created_at, updated_at)
+select gen_random_uuid(), id, 'email', id::text,
+  jsonb_build_object('sub', id::text, 'email', email, 'email_verified', true, 'phone_verified', false),
+  email, now(), now(), now()
+from auth.users
+where id in (
+  'a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000003',
+  'a0000000-0000-0000-0000-000000000004','a0000000-0000-0000-0000-000000000005',
+  'b0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000002')
+on conflict (provider, provider_id) do nothing;
+
+-- Align GoTrue token fields (empty strings, not null)
+update auth.users set
+  confirmation_token = coalesce(confirmation_token, ''),
+  recovery_token = coalesce(recovery_token, ''),
+  email_change_token_new = coalesce(email_change_token_new, ''),
+  email_change = coalesce(email_change, ''),
+  phone_change = coalesce(phone_change, '')
+where id in (
+  'a0000000-0000-0000-0000-000000000001','a0000000-0000-0000-0000-000000000002','a0000000-0000-0000-0000-000000000003',
+  'a0000000-0000-0000-0000-000000000004','a0000000-0000-0000-0000-000000000005',
+  'b0000000-0000-0000-0000-000000000001','b0000000-0000-0000-0000-000000000002');
 
 -- Public users
 insert into public.users (id, email, display_name, photo_url, role, email_verified, created_at, updated_at)
