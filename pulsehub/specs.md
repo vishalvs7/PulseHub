@@ -351,7 +351,9 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 | Platform-native preview frames + CSS overlays | ✅ Done (`PlatformPreviews.tsx` — IG/X/LinkedIn/TikTok/YouTube/FB/Threads/Pinterest/Reddit mock frames) |
 | Content-type → platform targeting (e.g. vertical video → IG Reel / TikTok / YouTube Shorts) | ✅ Done (`postFormats.ts` — 5 content types, eligibility per type, derived per-platform destination) |
 | Media **uploader** (video/asset → Supabase Storage signed URL) | ✅ Done (`/api/social/zernio/upload`, `post-media` bucket) |
-| Character-limit validation | ✅ Done (per-platform char counters in Step 2) |
+| Character-limit validation | ✅ Done (per-platform char counters in Step 2; AI captions auto-validate per platform) |
+| **AI per-platform caption generation in composer** | ✅ Done (`PostComposer.tsx` Step 2 "AI Captions for each platform" — one prompt streams tailored captions for IG/X/LinkedIn/TikTok, each editable inline, sent per-platform as `customContent`) |
+| **Video resize + trim** | ✅ Done (`ClipStudio.tsx` in AI Studio "Resize & Trim" — aspect presets, start/end trim pins, 3 fill modes: center-crop w/ draggable crop window, blurred fit, letterbox; optional audio capture) |
 | `post_targets` table (per-platform post status) | ✅ Done (table + RLS; `posting.service` writes/updates targets per platform) |
 | Deals/Inquiries state machine + `deals` table | ❌ Missing (`campaigns.status` exists, different model) |
 | Real-time chat (Supabase Realtime) | ❌ Missing (inbox is placeholder UI) |
@@ -361,6 +363,7 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 | Unified **`views`** metric normalization | ❌ Missing (`analytics_snapshots` has reach/impressions only) |
 | Social OAuth connect (IG/Twitter/LinkedIn) | 🟡 Scaffolded (OAuth service + connect/callback routes; needs app credentials + app review) |
 | Social middleware aggregator (Zernio) | ✅ Done (Zernio service + cross-posting live via Zernio API; upload, connect, sync, posts routes) |
+| **Multi-account per platform (Accounts page)** | ✅ Done (`ZernioConnections.tsx` — one card per connected profile, add-account modal with platform picker + label, pending-auth state, supported-platforms strip; `social_accounts` supports multiple rows per platform) |
 | Shadcn UI | ❌ Using custom UI components |
 | Brand logos in UI (react-icons) | ✅ Done (`BrandIcon.tsx` — real SVG logos across composer/sidebar) |
 | 5.1 Rate & ROI Calculator | ✅ Done (`/tools/rate-calculator`, `RateCalculator.tsx`) |
@@ -381,6 +384,13 @@ Low-effort, standalone tools that drive organic traffic and solve real creator p
 Recent working sessions and their outcomes. Supabase is now the **live production database** (project `elsowkdruovxrotbxsmi`, region `ap-northeast-2`), fully migrated, seeded, and verified end-to-end.
 
 ## What Was Done Recently
+
+### 0. Posting UX + AI Studio + Accounts (Latest)
+- **AI captions inside the composer** (`PostComposer.tsx` Step 2): one prompt → streamed, platform-tailored captions for Instagram / X / LinkedIn / TikTok, each rendered in its own **editable** box with live char counters; per-platform captions are sent to Zernio as `customContent` (API already supported it) and reflected in previews. Removed the standalone "Caption Tuner" tab from AI Studio (component deleted).
+- **`ClipStudio.tsx` — combined Resize & Trim** (replaces the old VideoResizer tab): aspect presets (9:16, 1:1, 4:5, 16:9), trim start/end pins with playhead scrub, and **3 fill modes** that fix the landscape→portrait zoom-out problem: **center-crop with a draggable crop window**, **blurred fit** (nothing cut, blurred sides), and **letterbox**. Optional **audio-preserving** real-time render path.
+- **Accounts page supports multiple profiles per platform** (`ZernioConnections.tsx` redesign): empty state "No profiles connected" + Add New Account; modal with platform-type grid + username/label; pending-auth card → Sync to finish; one card per connected profile; horizontal "Platforms supported" strip at the bottom. `social_accounts` already allowed multiple rows per platform — no migration needed.
+- **Sidebar icon differentiation:** Deals → `Handshake`, Comments → `MessagesSquare`, Comment-to-DM → `Bot` (brand + influencer nav).
+- Build green; pushed to `main` (auto-deploys).
 
 ### 1. Supabase Live Database (Applied & Verified)
 - **Migrations applied to the cloud project:** `supabase/migrations/00001_schema.sql` (12 tables: `users`, `brand_profiles`, `influencer_profiles`, `posts`, `post_targets`, `campaigns`, `campaign_influencers`, `social_accounts`, `analytics_snapshots`, `conversations`, `messages`, `notifications`; 38 RLS policies; functions `set_updated_at`, `auth_user_id`, `handle_new_user`, `is_admin`; triggers) and `00002_quick_wins.sql` (`reach_tier` generated column on `influencer_profiles`, `base_rate_min`/`base_rate_max`/`base_rate_currency` on `influencer_profiles`, `post_targets` table).
@@ -423,6 +433,9 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - ✅ Mobile-first responsive UI (drawer sidebar, hamburger nav)
 - ✅ Pricing page, Creator Academy, all 5 growth micro-tools
 - ✅ **Cross-posting wizard** (4 steps: content type → accounts → preview → schedule) on Zernio aggregator
+- ✅ **AI per-platform captions in composer** (streamed, inline-editable, sent as per-platform `customContent`)
+- ✅ **Resize & Trim** (`ClipStudio` — crop modes incl. no-cut blurred fit, trim pins, optional audio)
+- ✅ **Multi-account support** on the Accounts page (add-account modal, pending-auth state)
 - ✅ **Unified comment inbox** (long-card UI, search, platform filters, inline replies, RLS policies + 12 seeded comments)
 - ✅ **Comment-to-DM** automation with link **and document (PDF/DOCX) sharing**
 - ✅ Auth deadlock fix (pages load on full reload); users-readable RLS policy (no more 406s on deals)
@@ -463,4 +476,6 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 3. Add per-account scheduling UI (list/view/cancel scheduled posts) + sync status from Zernio
 4. Build real-time chat (Supabase Realtime) + Deals state machine
 5. Build the analytics worker/cron for live metrics
-6. Build the admin panel
+6. Build the admin panel (overview + user management first; needs `users.status` column + admin RLS write policies)
+7. Wire the campaign flow end-to-end (create → launch → offer → accept) — service exists, UI buttons currently dead
+8. Extend the composer AI prompt with explicit tone/keyword fields
