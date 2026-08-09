@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import {
   ImagePlus, Send, Calendar, Clock, Zap, Link2, X, Loader2, ChevronLeft, ChevronRight,
-  FileText, Check, Smartphone, Clock4,
+  FileText, Check, Smartphone, Clock4, Sparkles, Wand2, AlertCircle,
 } from 'lucide-react';
 import { getSupabase } from '@/lib/supabase/client';
 import { PLATFORM_CONFIGS, PLATFORM_LIST } from '@/lib/socialPlatforms';
@@ -16,6 +16,9 @@ import PlatformPreviews from './PlatformPreviews';
 import type { PlatformPreviewProps } from './PlatformPreviews';
 import AspectShape from './AspectShape';
 import BrandIcon from './BrandIcon';
+import { generateCaption, parsePlatformCaptions } from '@/services/ai.service';
+import { PLATFORM_KEYS } from '@/lib/ai/platforms';
+import type { PlatformKey } from '@/lib/ai/platforms';
 
 interface ConnectedAccount {
   platform: string;
@@ -28,6 +31,13 @@ interface PostComposerProps {
 }
 
 const STEPS = ['Content Type', 'Accounts & Text', 'Preview', 'Schedule'] as const;
+
+const AI_PLATFORM_MAP: Record<PlatformKey, CrossPostPlatform> = {
+  instagram: 'instagram',
+  linkedin: 'linkedin',
+  twitter: 'twitter',
+  tiktok: 'tiktok',
+};
 
 export default function PostComposer({ userId, connectionsHref }: PostComposerProps) {
   const [step, setStep] = useState(0);
@@ -44,6 +54,14 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
   const [error, setError] = useState('');
   const [result, setResult] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Per-platform captions (AI-generated or hand-edited). Falls back to `content`.
+  const [platformCaptions, setPlatformCaptions] = useState<Partial<Record<CrossPostPlatform, string>>>({});
+  // AI assistant
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiStreaming, setAiStreaming] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const aiBufferRef = useRef('');
 
   const loadConnected = useCallback(async () => {
     const supabase = getSupabase();
@@ -73,6 +91,7 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
     setSelected([]);
     setMedia([]);
     setContent('');
+    setPlatformCaptions({});
   };
 
   const handleFiles = async (files: FileList | null) => {
@@ -133,7 +152,11 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
         body: JSON.stringify({
           content,
           mediaUrls: media.map((m) => m.url),
-          platforms: selected.map((p) => ({ platform: p, destination: destinations[p] })),
+          platforms: selected.map((p) => ({
+            platform: p,
+            destination: destinations[p],
+            customContent: platformCaptions[p] || undefined,
+          })),
           scheduledFor,
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           contentType,
@@ -162,10 +185,64 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
     }
   };
 
-  const charState = (limit: number) => {
-    if (content.length > limit) return 'text-error-600 font-semibold';
-    if (content.length > limit * 0.9) return 'text-amber-600';
+  const platformCharState = (len: number, limit: number) => {
+    if (len > limit) return 'text-error-600 font-semibold';
+    if (len > limit * 0.9) return 'text-amber-600';
     return 'text-secondary-400';
+  };
+
+  const captionFor = (p: CrossPostPlatform) => platformCaptions[p] ?? content;
+
+  const generateCaptions = async () => {
+    if (!aiPrompt.trim()) {
+      setAiError('Describe your post so the AI can tailor captions.');
+      return;
+    }
+    if (selected.length === 0) {
+      setAiError('Select at least one platform first.');
+      return;
+    }
+    setAiError('');
+    setAiStreaming(true);
+    aiBufferRef.current = '';
+    setPlatformCaptions({});
+
+    try {
+      await generateCaption({
+        prompt: aiPrompt,
+        mode: 'platforms',
+        onChunk: (chunk) => {
+          // Parse streaming output and map only AI-supported selected platforms.
+          aiBufferRef.current += chunk;
+          const parsed = parsePlatformCaptions(aiBufferRef.current);
+          const updates: Partial<Record<CrossPostPlatform, string>> = {};
+          for (const key of PLATFORM_KEYS) {
+            const platform = AI_PLATFORM_MAP[key];
+            if (!selected.includes(platform)) continue;
+            const cap = parsed[key];
+            if (cap) updates[platform] = cap;
+          }
+          setPlatformCaptions((prev) => ({ ...prev, ...updates }));
+        },
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setAiError(err instanceof Error ? err.message : 'Something went wrong');
+    } finally {
+      setAiStreaming(false);
+    }
+  };
+
+  const setPlatformCaption = (p: CrossPostPlatform, value: string) => {
+    setPlatformCaptions((prev) => ({ ...prev, [p]: value }));
+  };
+
+  const clearPlatformCaption = (p: CrossPostPlatform) => {
+    setPlatformCaptions((prev) => {
+      const next = { ...prev };
+      delete next[p];
+      return next;
+    });
   };
 
   const destinations: Record<string, string> = {};
@@ -178,7 +255,7 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
   const previewItems: PlatformPreviewProps[] = selected.map((p) => ({
     platform: p,
     destination: destinations[p],
-    content,
+    content: captionFor(p),
     media,
     username: connectedByPlatform.get(p) || `${p} user`,
     isDocument: contentType === 'document',
@@ -346,6 +423,103 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
               <div className="text-right text-sm text-secondary-500 mt-1">{content.length} chars</div>
             </div>
 
+            {/* AI Caption Assistant */}
+            <div className="border border-accent-200 bg-accent-50/50 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="flex items-center gap-2 text-sm font-semibold text-secondary-900">
+                  <Sparkles className="w-4 h-4 text-accent-600" />
+                  AI Captions for each platform
+                </span>
+                {selected.length > 0 && (
+                  <span className="text-[11px] text-secondary-500">
+                    tailored for{' '}
+                    {selected.filter((p) => (AI_PLATFORM_MAP as Record<string, string>)[p]).length} of your{' '}
+                    {selected.length} platforms
+                  </span>
+                )}
+              </div>
+              <textarea
+                value={aiPrompt}
+                onChange={(e) => setAiPrompt(e.target.value)}
+                rows={2}
+                placeholder="Describe your post — e.g. Launching our eco-friendly water bottle, 50% off this week, with a seaside photo"
+                className="w-full p-3 border border-secondary-300 rounded-lg resize-none bg-white focus:border-accent-500 focus:ring-2 focus:ring-accent-200 outline-none text-sm"
+              />
+              <div className="flex items-center justify-between mt-2">
+                <Button
+                  onClick={generateCaptions}
+                  loading={aiStreaming}
+                  disabled={aiStreaming}
+                  size="sm"
+                  className="bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700"
+                  icon={<Wand2 className="w-4 h-4" />}
+                >
+                  Generate captions
+                </Button>
+                <span className="text-[11px] text-secondary-500">
+                  Instagram · X · LinkedIn · TikTok — then tweak each below
+                </span>
+              </div>
+              {aiError && (
+                <p className="flex items-center gap-2 text-sm text-error-700 bg-error-50 border border-error-200 rounded-lg px-4 py-2 mt-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  {aiError}
+                </p>
+              )}
+            </div>
+
+            {/* Per-platform captions — editable */}
+            {selected.length > 0 && (
+              <div className="space-y-3">
+                <span className="text-sm font-medium text-secondary-700">
+                  Captions per platform <span className="text-secondary-400 font-normal">(edit any box below; empty = use main caption)</span>
+                </span>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {selected.map((id) => {
+                    const cfg = PLATFORM_CONFIGS[id];
+                    const custom = platformCaptions[id];
+                    const shown = captionFor(id);
+                    const over = shown.length > cfg.maxChars;
+                    return (
+                      <div key={id} className="border border-secondary-200 rounded-xl p-3">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="flex items-center gap-2">
+                            <BrandIcon platform={id} className="w-6 h-6 rounded-md" />
+                            <span className="text-sm font-semibold text-secondary-900">{cfg.name}</span>
+                          </span>
+                          <span className={`text-xs ${platformCharState(shown.length, cfg.maxChars)} ${over ? '' : ''}`}>
+                            {shown.length}/{cfg.maxChars}
+                          </span>
+                        </div>
+                        <textarea
+                          value={shown}
+                          onChange={(e) => setPlatformCaption(id, e.target.value)}
+                          rows={3}
+                          placeholder={`Your ${cfg.name} caption…`}
+                          className={`w-full p-3 border rounded-lg resize-none text-sm outline-none focus:ring-2 ${
+                            custom
+                              ? 'border-accent-300 bg-accent-50/40 focus:ring-accent-200 focus:border-accent-500'
+                              : 'border-secondary-200 bg-white focus:ring-primary-200 focus:border-primary-500'
+                          }`}
+                        />
+                        {custom && (
+                          <div className="flex items-center justify-between mt-1.5">
+                            <span className="text-[10px] text-accent-700 font-medium">Customized for {cfg.name}</span>
+                            <button
+                              onClick={() => clearPlatformCaption(id)}
+                              className="text-[11px] text-secondary-500 hover:text-secondary-700 underline"
+                            >
+                              Reset to main caption
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Platform checkboxes — only eligible */}
             <div>
               <span className="text-sm font-medium text-secondary-700">
@@ -405,15 +579,17 @@ export default function PostComposer({ userId, connectionsHref }: PostComposerPr
                 <div className="flex flex-wrap gap-3 mt-3">
                   {selected.map((id) => {
                     const cfg = PLATFORM_CONFIGS[id];
-                    const status = content.length <= cfg.maxChars ? 'ok' : content.length > cfg.maxChars ? 'over' : 'near';
+                    const shown = captionFor(id);
                     return (
                       <span key={id} className="flex items-center space-x-1.5 text-xs">
                         <BrandIcon platform={id} className="w-4 h-4 rounded" />
                         <span className="font-medium text-secondary-700">{cfg.name}</span>
-                        <span className={charState(cfg.maxChars)}>
-                          {content.length}/{cfg.maxChars}
+                        <span className={platformCharState(shown.length, cfg.maxChars)}>
+                          {shown.length}/{cfg.maxChars}
                         </span>
-                        {status === 'over' && <span className="text-error-600 font-semibold">Over limit!</span>}
+                        {shown.length > cfg.maxChars && (
+                          <span className="text-error-600 font-semibold">Over limit!</span>
+                        )}
                       </span>
                     );
                   })}

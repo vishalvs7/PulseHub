@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import PlatformCaptionTuner from '@/components/ai/PlatformCaptionTuner';
 import TranscriptToClip from '@/components/ai/TranscriptToClip';
-import VideoResizer from '@/components/ai/VideoResizer';
+import ClipStudio from '@/components/ai/ClipStudio';
 import { Sparkles, Scissors, Crop, Lock } from 'lucide-react';
 
 type TabId = 'tuner' | 'transcript' | 'resize';
@@ -11,7 +11,7 @@ type TabId = 'tuner' | 'transcript' | 'resize';
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; pro: boolean }[] = [
   { id: 'tuner', label: 'Caption Tuner', icon: Sparkles, pro: true },
   { id: 'transcript', label: 'Transcript-to-Clip', icon: Scissors, pro: true },
-  { id: 'resize', label: 'Video Resizer', icon: Crop, pro: false },
+  { id: 'resize', label: 'Resize & Trim', icon: Crop, pro: false },
 ];
 
 export default function AIStudio() {
@@ -48,7 +48,7 @@ export default function AIStudio() {
 
       {tab === 'tuner' && <PlatformCaptionTuner />}
       {tab === 'transcript' && <TranscriptToClip />}
-      {tab === 'resize' && <VideoResizer />}
+      {tab === 'resize' && <ClipStudio />}
     </div>
   );
 }
