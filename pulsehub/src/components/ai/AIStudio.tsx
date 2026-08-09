@@ -1,28 +1,26 @@
 'use client';
 
 import { useState } from 'react';
-import PlatformCaptionTuner from '@/components/ai/PlatformCaptionTuner';
 import TranscriptToClip from '@/components/ai/TranscriptToClip';
 import ClipStudio from '@/components/ai/ClipStudio';
-import { Sparkles, Scissors, Crop, Lock } from 'lucide-react';
+import { Scissors, Crop, Lock } from 'lucide-react';
 
-type TabId = 'tuner' | 'transcript' | 'resize';
+type TabId = 'transcript' | 'resize';
 
 const TABS: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }>; pro: boolean }[] = [
-  { id: 'tuner', label: 'Caption Tuner', icon: Sparkles, pro: true },
   { id: 'transcript', label: 'Transcript-to-Clip', icon: Scissors, pro: true },
   { id: 'resize', label: 'Resize & Trim', icon: Crop, pro: false },
 ];
 
 export default function AIStudio() {
-  const [tab, setTab] = useState<TabId>('tuner');
+  const [tab, setTab] = useState<TabId>('transcript');
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-secondary-900">AI Studio</h1>
-          <p className="text-secondary-600 mt-1">Per-platform captions, viral clip mining, and auto-resizing.</p>
+          <p className="text-secondary-600 mt-1">Viral clip mining and auto-resizing.</p>
         </div>
       </div>
 
@@ -46,7 +44,6 @@ export default function AIStudio() {
         })}
       </div>
 
-      {tab === 'tuner' && <PlatformCaptionTuner />}
       {tab === 'transcript' && <TranscriptToClip />}
       {tab === 'resize' && <ClipStudio />}
     </div>

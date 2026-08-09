@@ -17,7 +17,10 @@ import {
   Zap,
   UserCircle,
   Clock,
-  MessageSquare,
+  MessageCircle,
+  MessagesSquare,
+  Handshake,
+  Bot,
   Wrench,
   GraduationCap,
   Sparkles,
@@ -46,7 +49,7 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
   const base = `/${type}/${uid}`;
   const newPost = { name: 'New Post', href: `${base}/posting`, icon: Send };
   const connections = { name: 'Accounts', href: `${base}/connections`, icon: Users };
-  const deals = { name: 'Deals', href: `${base}/deals`, icon: MessageSquare };
+  const deals = { name: 'Deals', href: `${base}/deals`, icon: Handshake };
 
   if (type === 'brand') {
     return [
@@ -54,13 +57,13 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
       { name: 'New Post', href: newPost.href, icon: newPost.icon },
       { name: 'Explore Influencers', href: `${base}/explore`, icon: Users },
       { name: 'Deals', href: deals.href, icon: deals.icon },
-      { name: 'Comments', href: `${base}/comments`, icon: MessageSquare },
+      { name: 'Comments', href: `${base}/comments`, icon: MessagesSquare },
       { name: connections.name, href: connections.href, icon: connections.icon },
       { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
       { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
       { name: 'Campaigns', href: `${base}/campaigns`, icon: Megaphone },
       { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
-      { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: MessageSquare },
+      { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: Bot },
       { name: 'Academy', href: '/academy', icon: GraduationCap },
       { name: 'Free Tools', href: '/tools', icon: Wrench },
       { name: 'Settings', href: `${base}/settings`, icon: Settings },
@@ -70,13 +73,13 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
     { name: 'Dashboard', href: base, icon: LayoutDashboard },
     { name: 'New Post', href: newPost.href, icon: newPost.icon },
     { name: 'Deals', href: deals.href, icon: deals.icon },
-    { name: 'Comments', href: `${base}/comments`, icon: MessageSquare },
+    { name: 'Comments', href: `${base}/comments`, icon: MessagesSquare },
     { name: connections.name, href: connections.href, icon: connections.icon },
     { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
     { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
     { name: 'Profile', href: `${base}/profile`, icon: UserCircle },
     { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
-    { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: MessageSquare },
+    { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: Bot },
     { name: 'Academy', href: '/academy', icon: GraduationCap },
     { name: 'Free Tools', href: '/tools', icon: Wrench },
     { name: 'Settings', href: `${base}/settings`, icon: Settings },
