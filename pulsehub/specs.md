@@ -471,13 +471,20 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 
 ## Next Steps
 
-1. Migrate `src/middleware.ts` → `proxy` convention to clear the deployment warning
-2. Set up real platform OAuth credentials (IG Graph, X, LinkedIn, Reddit) and app review
-3. Build real-time chat (Supabase Realtime) + Deals state machine
-4. Build the background engines, queues & data ingestion pipeline (see "Future Plan of Action" below) — scheduled/fan-out publishing, token rotation, comment sync, analytics aggregation
-5. Build the admin panel (overview + user management first; needs `users.status` column + admin RLS write policies)
-6. Wire the campaign flow end-to-end (create → launch → offer → accept) — service exists, UI buttons currently dead
-7. Extend the composer AI prompt with explicit tone/keyword fields
+**Parallel Track A — Self-Hosted Unified Social API (top priority, non-breaking):**
+1. Reverse-engineer the current `ZernioService` + route shapes into a locked API contract (Phase P0)
+2. Stand up the new API service with `SOCIAL_PROVIDER=zernio|selfhosted` flag (default zernio) — P1
+3. Implement adapters one platform at a time (posts → comments → analytics) — P2
+4. Soak test, flip to selfhosted, remove Zernio, own pricing — P3/P4
+
+**Parallel Track B — Website features (unchanged, keep shipping):**
+5. Migrate `src/middleware.ts` → `proxy` convention to clear the deployment warning
+6. Set up real platform OAuth credentials (IG Graph, X, LinkedIn, Reddit) + app review
+7. Build real-time chat (Supabase Realtime) + Deals state machine
+8. Build the background engines, queues & data ingestion pipeline (sections 1–4) — these double as the new API's machinery
+9. Build the admin panel (overview + user management first; needs `users.status` column + admin RLS write policies)
+10. Wire the campaign flow end-to-end (create → launch → offer → accept) — service exists, UI buttons currently dead
+11. Extend the composer AI prompt with explicit tone/keyword fields
 
 ---
 
@@ -625,3 +632,66 @@ Social analytics APIs (impressions, reach, shares, video view duration) are comp
 * **Heat Map Pre-Computation:**
   * Calculating best posting times across thousands of past engagements in real time during a page load slows down dashboard performance.
   * The background worker aggregates historical engagement data by hour and day of the week off-peak, storing a lightweight 7×24 matrix per user ready for instant client-side rendering.
+
+## 5. Self-Hosted Unified Social API (Replace Zernio)
+
+**Goal:** Build our own unified social API aggregator (functionally equivalent to Zernio) so we can remove the Zernio dependency entirely, own the OAuth/rate-limit/token lifecycle, and set our own pricing tiers. **This is a parallel track — it must never regress current website features. The swap only happens when the new API is feature-complete and verified end-to-end.**
+
+### Why
+- Zernio is the only hard external dependency today: OAuth connect, cross-posting, comments, analytics all route through it.
+- Removing it means full control over pricing, platform coverage, rate limits, and data.
+- The background engines from sections 1–4 are the same machinery this API needs — building them here is building the replacement.
+
+### Target API Surface (drop-in replacement for current `/api/social/zernio/*` routes)
+| Current Zernio route | New self-hosted route | Status |
+|---|---|---|
+| `/api/social/zernio/connect` (+callback/select) | `/api/social/connect` (+ callback/select) | 🟡 Scaffolded (`oauth.service.ts`), needs platform creds |
+| `/api/social/zernio/posts` (POST list / DELETE) | `/api/social/posts` | ✅ Interface defined by ZernioService; swap base + auth |
+| `/api/social/zernio/upload` | `/api/social/upload` (Supabase Storage signed URL) | ✅ Already storage-backed, no Zernio needed |
+| `/api/social/zernio/analytics` (+ follower-stats) | `/api/social/analytics` | ✅ Logic is ours; only fetch layer changes |
+| `/api/social/zernio/inbox` / `comments` | `/api/social/comments` | ✅ Parsing is ours; only fetch layer changes |
+| Webhooks (post published, new comment) | `/api/webhooks/social` | ❌ Missing — needs worker + queue |
+
+The frontend already talks to these routes via `ZernioService` (`src/services/social/zernio.service.ts`) — the migration is a **service-layer swap**, not a UI rewrite.
+
+### Architecture
+```
+[ PulseHub Web App ]  ──HTTP──►  [ PulseHub Unified Social API (new service) ]
+                                     │  exposes /connect /posts /comments /analytics /webhooks
+                                     │
+                          ┌──────────┼─────────────┬─────────────┐
+                          ▼          ▼             ▼             ▼
+                     [IG Graph]  [X API v2]   [LinkedIn]    [Reddit/TikTok/YT]
+                     (platform adapters, per-platform OAuth + rate limiting)
+                          │
+                          ▼
+                   [ Token Vault (encrypted) ]  ◄── daily rotation cron (section 2)
+                          │
+                          ▼
+                   [ Queue/Worker (sections 1, 3, 4) ] ──► real-time events to UI
+```
+
+### Platform Adapter Interface (one per platform)
+```
+connect(state)          -> start OAuth dance
+callback(code)          -> exchange code, store tokens in vault
+publish(payload)        -> create post on platform (sync or enqueued)
+getComments(postId)     -> normalized comment feed
+replyComment(id, text)  -> post reply
+getAnalytics(accountId) -> normalized metrics (impressions/reach/engagements/views)
+refreshToken()          -> proactive rotation (section 2)
+```
+
+### Migration Plan (parallel, non-breaking)
+1. **Phase P0 (now):** Lock the normalized API contract to exactly what the frontend consumes today (reverse-engineer `ZernioService` + route response shapes). Document in this spec.
+2. **Phase P1:** Stand up the new API service with stubbed adapters returning the contract. Add a config flag `SOCIAL_PROVIDER=zernio|selfhosted` — default `zernio` so nothing changes in production.
+3. **Phase P2:** Implement adapters one platform at a time behind the flag, verifying each against the live Zernio behavior (posts → comments → analytics). Keep Zernio as fallback for unimplemented platforms.
+4. **Phase P3:** When all in-scope platforms are implemented + verified, flip `SOCIAL_PROVIDER=selfhosted`, run soak tests, then delete Zernio service/routes/env.
+5. **Phase P4:** Own pricing. Gate platform features by subscription tier (posts/month, platforms, comment volume) now that we control the API layer.
+
+**Do not:** remove Zernio code or env keys until P3 soak tests pass on production traffic.
+
+### Current Zernio constraints this removes
+- Per-platform OAuth token limits (Zernio's one-account-per-platform model) → we store unlimited accounts in our own vault.
+- Zernio platform coverage/approval gates → we control which platforms and when.
+- Zernio pricing/rate limits → we set our own.
