@@ -318,7 +318,7 @@ export default function CommentsInbox({ userId }: CommentsInboxProps) {
 
               {/* Post context */}
               <div className="text-center">
-                <span className="text-xs text-secondary-400 bg-white border border-secondary-200 rounded-lg px-4 py-2 inline-flex items-center gap-2">
+                <span className="text-xs text-secondary-400 bg-white border border-secondary-200 rounded-[8px] px-4 py-2 inline-flex items-center gap-2">
                   <MessageCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>On: {selected.postContent || 'Untitled post'}</span>
                   {selected.commentCount > 0 && (
