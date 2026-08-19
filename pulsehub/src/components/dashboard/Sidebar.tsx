@@ -13,6 +13,8 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Zap,
   UserCircle,
   Clock,
@@ -23,6 +25,8 @@ import {
   Wrench,
   GraduationCap,
   Sparkles,
+  Scissors,
+  Crop,
   Menu,
   X,
   CalendarClock,
@@ -33,6 +37,16 @@ interface SidebarItem {
   href: string;
   icon: React.ComponentType<{ className?: string }>;
 }
+
+interface SidebarGroup {
+  name: string;
+  icon: React.ComponentType<{ className?: string }>;
+  children: SidebarItem[];
+}
+
+type SidebarEntry = SidebarItem | SidebarGroup;
+
+const isGroup = (entry: SidebarEntry): entry is SidebarGroup => 'children' in entry;
 
 interface SidebarProps {
   type: 'brand' | 'influencer';
@@ -45,13 +59,25 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
-function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
+function buildItems(type: 'brand' | 'influencer', uid: string): SidebarEntry[] {
   const base = `/${type}/${uid}`;
   const newPost = { name: 'New Post', href: `${base}/posting`, icon: Send };
   const analytics = { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 };
   const posts = { name: 'Posts', href: `${base}/posts`, icon: CalendarClock };
   const connections = { name: 'Accounts', href: `${base}/connections`, icon: Users };
   const deals = { name: 'Deals', href: `${base}/deals`, icon: Handshake };
+
+  const aiStudio: SidebarGroup = {
+    name: 'AI Studio',
+    icon: Sparkles,
+    children: [
+      { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
+      { name: 'Transcript to Clip', href: `${base}/ai/transcript-to-clip`, icon: Scissors },
+      { name: 'Resize & Trim', href: `${base}/ai/resize-trim`, icon: Crop },
+      { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
+      { name: 'Comment to DM', href: `${base}/comment-to-dm`, icon: Bot },
+    ],
+  };
 
   if (type === 'brand') {
     return [
@@ -62,10 +88,8 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
       deals,
       { name: 'Comments', href: `${base}/comments`, icon: MessagesSquare },
       connections,
-      { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
+      aiStudio,
       { name: 'Campaigns', href: `${base}/campaigns`, icon: Megaphone },
-      { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
-      { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: Bot },
       { name: 'Academy', href: '/academy', icon: GraduationCap },
       { name: 'Free Tools', href: '/tools', icon: Wrench },
       { name: 'Settings', href: `${base}/settings`, icon: Settings },
@@ -79,9 +103,7 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
     connections,
     deals,
     { name: 'Comments', href: `${base}/comments`, icon: MessagesSquare },
-    { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
-    { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
-    { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: Bot },
+    aiStudio,
     { name: 'Academy', href: '/academy', icon: GraduationCap },
     { name: 'Free Tools', href: '/tools', icon: Wrench },
     { name: 'Settings', href: `${base}/settings`, icon: Settings },
@@ -99,6 +121,12 @@ function SidebarContent({
 }: SidebarProps & { collapsed: boolean; onToggleCollapse: () => void; onNavigate?: () => void }) {
   const pathname = usePathname();
   const items = buildItems(type, uid);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (name: string, current: boolean) => {
+    if (collapsed) onToggleCollapse();
+    setOpenGroups((prev) => ({ ...prev, [name]: !current }));
+  };
 
   return (
     <div className={`flex flex-col h-full bg-white border-r border-secondary-200 transition-all duration-300 ${
@@ -144,6 +172,59 @@ function SidebarContent({
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {items.map((item) => {
+          if (isGroup(item)) {
+            const Icon = item.icon;
+            const childActive = item.children.some((c) => pathname === c.href);
+            const open = openGroups[item.name] ?? childActive;
+            return (
+              <div key={item.name}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(item.name, open)}
+                  className={`w-full flex items-center ${
+                    collapsed ? 'justify-center px-3' : 'space-x-3 px-4'
+                  } py-3 rounded-lg transition-all ${
+                    childActive
+                      ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-600'
+                      : 'text-secondary-700 hover:bg-secondary-50'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 shrink-0 ${childActive ? 'text-primary-600' : 'text-secondary-400'}`} />
+                  {!collapsed && <span className="font-medium truncate flex-1 text-left">{item.name}</span>}
+                  {!collapsed &&
+                    (open ? (
+                      <ChevronUp className="w-4 h-4 text-secondary-400 shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-secondary-400 shrink-0" />
+                    ))}
+                </button>
+                {open && !collapsed && (
+                  <div className="mt-1 space-y-0.5">
+                    {item.children.map((child) => {
+                      const ChildIcon = child.icon;
+                      const active = pathname === child.href;
+                      return (
+                        <Link
+                          key={child.name}
+                          href={child.href}
+                          onClick={onNavigate}
+                          className={`flex items-center space-x-3 py-2.5 pl-12 pr-4 rounded-lg transition-all ${
+                            active
+                              ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-600'
+                              : 'text-secondary-700 hover:bg-secondary-50'
+                          }`}
+                        >
+                          <ChildIcon className={`w-4 h-4 shrink-0 ${active ? 'text-primary-600' : 'text-secondary-400'}`} />
+                          <span className="font-medium truncate">{child.name}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           const Icon = item.icon;
           const isActive = pathname === item.href;
           return (
