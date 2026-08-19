@@ -473,9 +473,155 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 
 1. Migrate `src/middleware.ts` → `proxy` convention to clear the deployment warning
 2. Set up real platform OAuth credentials (IG Graph, X, LinkedIn, Reddit) and app review
-3. Add per-account scheduling UI (list/view/cancel scheduled posts) + sync status from Zernio
-4. Build real-time chat (Supabase Realtime) + Deals state machine
-5. Build the analytics worker/cron for live metrics
-6. Build the admin panel (overview + user management first; needs `users.status` column + admin RLS write policies)
-7. Wire the campaign flow end-to-end (create → launch → offer → accept) — service exists, UI buttons currently dead
-8. Extend the composer AI prompt with explicit tone/keyword fields
+3. Build real-time chat (Supabase Realtime) + Deals state machine
+4. Build the background engines, queues & data ingestion pipeline (see "Future Plan of Action" below) — scheduled/fan-out publishing, token rotation, comment sync, analytics aggregation
+5. Build the admin panel (overview + user management first; needs `users.status` column + admin RLS write policies)
+6. Wire the campaign flow end-to-end (create → launch → offer → accept) — service exists, UI buttons currently dead
+7. Extend the composer AI prompt with explicit tone/keyword fields
+
+---
+
+# Future Plan of Action: Background Engines, Queues & Data Ingestion
+
+Running a multi-platform cross-posting platform requires offloading long-running, timing-dependent, and repetitive tasks to an asynchronous background architecture. Here is the operational blueprint for orchestrating queues, token lifecycles, and bidirectional data sync.
+
+## 1. The Distributed Scheduling & Publishing Engine
+
+A standard web server cannot handle scheduled posts via basic database timers because serverless functions timeout, network calls to multiple social platforms can stall, and simultaneous user posts can trigger API rate limits.
+
+```
+[ User Schedules Post ]
+          │
+          ▼
+[ Delayed Message / Job Enqueued ] ──(Waits until target timestamp)──┐
+                                                                    ▼
+[ Worker Picks Up Job ] ◄───────────────────────────────────────────┘
+          │
+          ├─► Validates Token Status
+          ├─► Spawns Parallel Sub-Jobs per Destination (Fan-Out)
+          │         │
+          │         ├─► Task A: Call Meta API
+          │         ├─► Task B: Call LinkedIn API
+          │         └─► Task C: Call YouTube API
+          │
+          ▼
+[ Destination State Machine Updates ] ──► (Dispatches SSE/WebSocket event to UI)
+```
+
+* **Delayed Queue Orchestration:**
+  * When a post is scheduled for a future timestamp, the system computes the delay offset (Δt = Target Time − Current Time) and registers a delayed job in the message broker.
+  * Instead of polling the database every second (which degrades database performance at scale), the worker sleeps until the broker triggers an execution event at the precise millisecond.
+
+* **The "Fan-Out" Worker Pattern:**
+  * A single post with 5 target accounts is split into 5 isolated sub-tasks.
+  * If the LinkedIn API succeeds but Meta's API experiences a temporary timeout, only the Meta sub-task enters a retry loop. The overall post status reflects partial success rather than failing entirely.
+
+* **Exponential Backoff & Jitter:**
+  * When a social platform returns a rate limit (HTTP 429) or temporary server error (HTTP 5xx), the worker retries the request using exponential backoff:
+
+    Retry Delay = 2^(attempt) × 1000ms + Random Jitter
+
+  * Jitter prevents thousands of delayed jobs from hitting social media endpoints at the exact same millisecond.
+
+## 2. Proactive OAuth Token Rotation & Session Maintenance
+
+OAuth tokens degrade over time due to platform-mandated lifecycles, manual password resets, or permission revocations.
+
+```
+[ Scheduled Token Cron (Daily) ]
+          │
+          ▼
+[ Query Expiring Accounts: token_expires_at < NOW + 5 Days ]
+          │
+          ├─► Has Valid Refresh Token?
+          │         │
+          │         ├─► YES: Request New Access Token ──► Update Vault & Timestamp
+          │         │
+          │         └─► NO (or Revoked):
+          │                   │
+          │                   ▼
+          │         [ Flag Account: "Needs Re-auth" ]
+          │                   │
+          ▼                   ▼
+[ Trigger In-App Alert / Email Notification to User ]
+```
+
+* **Token Expiration Tiers:**
+  * Short-Lived Tokens (e.g., standard User Tokens): Expire in 1 to 24 hours.
+  * Long-Lived Tokens (e.g., Meta 60-day tokens, LinkedIn 60-day tokens): Require proactive exchange before the 60-day mark.
+  * Refresh Tokens: Long-lived keys used solely to mint fresh access tokens without requiring the user to log in again.
+
+* **Proactive Refresh Window (The 5-Day Buffer):**
+  * Never wait until a token expires to refresh it. If a user schedules a post for tomorrow and their token expires tonight, the post will fail silently.
+  * Running a daily scan against accounts expiring within 5 days ensures tokens remain perpetually fresh.
+
+* **Graceful Revocation Handling:**
+  * If a user disconnects the app from within their native Instagram or LinkedIn security settings, token refreshes return an `invalid_grant` error.
+  * The system immediately marks the account state as `requires_reconnection` and surfaces a non-intrusive warning badge in the user dashboard, preventing scheduled publishing failures.
+
+## 3. Bidirectional Comment Sync & Reply Engine
+
+Ingesting public comments across multiple networks requires balancing fresh conversation feeds against strict platform API rate limits.
+
+```
+[ Active Posts Detector (Created < 7 Days) ]
+          │
+          ▼
+[ Batch Dispatcher: Group by Connected Platform ]
+          │
+          ├─► Fetch New Comments via Normalized Endpoint
+          │
+          ▼
+[ Ingestion & Deduplication Pipeline ]
+          │
+          ├─► Is platform_comment_id in Database?
+          │         │
+          │         ├─► YES: Update Like/Reply Counts
+          │         └─► NO: Insert as Unread Comment
+          │
+          ▼
+[ Trigger Real-time Event to Unified Dashboard Inbox ]
+```
+
+* **Active Window Decay Strategy:**
+  * 95% of social post comments occur within 72 hours of publication.
+  * **Posts < 24 hours old:** Polled every 5–10 minutes.
+  * **Posts 1–7 days old:** Polled every 30–60 minutes.
+  * **Posts > 7 days old:** Polling ceases; updated only on manual user demand (e.g., clicking "Refresh Comments" on an old post).
+
+* **Deduplication Engine:**
+  * Social network comment feeds return arrays of comments on every call. The ingestion engine checks incoming unique platform comment IDs against local records to ensure only net-new comments trigger notifications or database writes.
+
+* **Outbound Reply Flow:**
+  * When a user replies from the unified dashboard, the system bypasses the queue and posts directly to the network's comment endpoint via the platform adapter, appending the new reply to the local thread instantly for optimistic UI rendering.
+
+## 4. Asynchronous Analytics Aggregation & Heat Maps
+
+Social analytics APIs (impressions, reach, shares, video view duration) are computationally heavy and strictly rate-limited, requiring decoupled batch processing.
+
+```
+[ Nightly Analytics Cron (Off-Peak Hours) ]
+          │
+          ▼
+[ Fetch Lifetime Post Destinations ]
+          │
+          ▼
+[ Batch Query Platform Insights Endpoints ]
+          │
+          ▼
+[ Normalize into Analytics Snapshots Table ]
+          │
+          ▼
+[ Compute Aggregated Audience Heat Map Data ]
+```
+
+* **Time-Series Metric Snapshots:**
+  * Instead of overwriting existing post stats, metrics are recorded as daily timestamped snapshots. This allows users to view growth over time (e.g., "This video gained 4,000 views on Day 1 and 12,000 views on Day 4").
+
+* **Cross-Platform Normalization:**
+  * Each network uses different terms for engagement (e.g., Twitter "Retweets", LinkedIn "Reposts", Meta "Shares").
+  * The analytics aggregator maps these metrics into universal metrics: `impressions`, `reach`, `engagements`, and `conversions`.
+
+* **Heat Map Pre-Computation:**
+  * Calculating best posting times across thousands of past engagements in real time during a page load slows down dashboard performance.
+  * The background worker aggregates historical engagement data by hour and day of the week off-peak, storing a lightweight 7×24 matrix per user ready for instant client-side rendering.
