@@ -123,8 +123,10 @@ export default function CommentsInbox({ userId }: CommentsInboxProps) {
     try {
       await CommentService.reply(userId, comment, text.trim());
       setReplies((prev) => ({ ...prev, [key]: { text: text.trim(), at: new Date().toISOString() } }));
+      setComments((prev) =>
+        prev.map((c) => (cardKey(c) === key ? { ...c, commentCount: c.commentCount + 1 } : c))
+      );
       setReplyText('');
-      await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send reply.');
     } finally {
