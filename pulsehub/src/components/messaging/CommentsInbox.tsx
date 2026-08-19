@@ -154,7 +154,7 @@ export default function CommentsInbox({ userId }: CommentsInboxProps) {
       )}
 
       {/* LEFT — comment list */}
-      <div className={`${mobileOpen ? 'hidden' : 'flex'} lg:flex flex-col w-full lg:w-[360px] xl:w-[400px] shrink-0 border-b lg:border-b-0 lg:border-r border-secondary-200 bg-secondary-50/40`}>
+      <div className={`${mobileOpen ? 'hidden' : 'flex'} lg:flex flex-col w-full lg:w-[370px] xl:w-[410px] shrink-0 border-b lg:border-b-0 lg:border-r border-secondary-200 bg-secondary-50/40`}>
         {/* Filters */}
         <div className="p-4 border-b border-secondary-200 bg-white space-y-3">
           <div className="flex items-center space-x-2 text-secondary-500">
@@ -318,10 +318,12 @@ export default function CommentsInbox({ userId }: CommentsInboxProps) {
 
               {/* Post context */}
               <div className="text-center">
-                <span className="text-xs text-secondary-400 bg-white border border-secondary-200 rounded-full px-3 py-1 inline-flex items-center gap-1.5">
-                  <MessageCircle className="w-3 h-3" />
-                  On: {selected.postContent || 'Untitled post'}
-                  {selected.commentCount > 0 && ` · ${selected.commentCount} comment${selected.commentCount === 1 ? '' : 's'}`}
+                <span className="text-xs text-secondary-400 bg-white border border-secondary-200 rounded-lg px-4 py-2 inline-flex items-center gap-2">
+                  <MessageCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>On: {selected.postContent || 'Untitled post'}</span>
+                  {selected.commentCount > 0 && (
+                    <span className="text-secondary-500">· {selected.commentCount} comment{selected.commentCount === 1 ? '' : 's'}</span>
+                  )}
                 </span>
               </div>
             </div>
