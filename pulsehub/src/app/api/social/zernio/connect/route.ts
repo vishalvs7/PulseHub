@@ -41,7 +41,14 @@ export async function POST(req: NextRequest) {
         .eq('id', user.id);
     }
 
-    const { authUrl } = await ZernioService.getConnectUrl(platform, profileId);
+    // White-label OAuth: headless mode + our own redirect so the user never
+    // sees Zernio's dashboard or selection UI. Selection-required platforms
+    // (facebook/linkedin/pinterest/instagram-fb-login) bounce through our
+    // branded picker via /api/social/zernio/callback.
+    const { authUrl } = await ZernioService.getConnectUrl(platform, profileId, {
+      headless: true,
+      redirectUrl: `${ZernioService.getBaseUrl()}/api/social/zernio/callback`,
+    });
 
     return NextResponse.json({ authUrl, profileId });
   } catch (err) {

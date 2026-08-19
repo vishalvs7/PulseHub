@@ -2,7 +2,7 @@
 
 import { useParams } from 'next/navigation';
 import PostComposer from '@/components/posting/PostComposer';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import RecentPosts from '@/components/posting/RecentPosts';
 
 export default function BrandPostingPage() {
   const params = useParams();
@@ -17,16 +17,7 @@ export default function BrandPostingPage() {
         </p>
       </div>
       <PostComposer userId={uid} connectionsHref={`/brand/${uid}/connections`} />
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Posts</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-secondary-500 text-sm">
-            Published/scheduled posts will appear here once synced from Zernio.
-          </p>
-        </CardContent>
-      </Card>
+      <RecentPosts />
     </div>
   );
 }

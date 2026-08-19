@@ -26,7 +26,11 @@ import {
   Building,
   AlertCircle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useParams } from 'next/navigation';
+import { AuthService } from '@/services/auth.service';
+import { InfluencerService } from '@/services/influencer.service';
+import { getSupabase } from '@/lib/supabase/client';
 
 interface NotificationSetting {
   id: string;
@@ -44,20 +48,23 @@ interface PricingTier {
 }
 
 export default function InfluencerSettingsPage() {
+  const params = useParams();
+  const uid = params.uid as string;
   const [activeTab, setActiveTab] = useState<'profile' | 'pricing' | 'notifications' | 'security'>('profile');
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
-    displayName: 'Sarah Chen',
-    email: 'sarah@influencer.com',
-    phoneNumber: '+1 (555) 123-4567',
-    website: 'https://sarahchen.com',
-    location: 'Los Angeles, California',
-    hourlyRate: '$150 - $250',
-    bio: 'Lifestyle & Travel Influencer | Tech Enthusiast ✨ Creating content that inspires and educates.',
+    displayName: '',
+    email: '',
+    phoneNumber: '',
+    website: '',
+    location: '',
+    hourlyRate: '',
+    bio: '',
   });
 
   // Password form state
@@ -115,10 +122,54 @@ export default function InfluencerSettingsPage() {
     { id: 'security', label: 'Security', icon: Shield },
   ];
 
-  const handleProfileUpdate = (e: React.FormEvent) => {
+  // Load real user data into the profile form (no placeholder identity).
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [userData, profile] = await Promise.all([
+          AuthService.getUserData(uid),
+          InfluencerService.getProfile(uid),
+        ]);
+        setProfileForm({
+          displayName: profile?.displayName && profile.displayName !== 'User' ? profile.displayName : userData?.displayName || '',
+          email: userData?.email || '',
+          phoneNumber: '',
+          website: profile?.website || '',
+          location: profile?.location && profile.location !== 'Unknown' ? profile.location : '',
+          hourlyRate: '',
+          bio: profile?.bio || '',
+        });
+      } catch {
+        // Non-fatal: leave the form empty; the user can fill it in.
+      }
+    };
+    load();
+  }, [uid]);
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In real app, this would update the profile via API
-    alert('Profile settings updated successfully!');
+    setProfileSaving(true);
+    try {
+      const ok = await InfluencerService.upsertProfile(uid, {
+        displayName: profileForm.displayName || 'User',
+        bio: profileForm.bio,
+        location: profileForm.location || 'Unknown',
+        website: profileForm.website,
+        niche: [],
+      });
+      if (!ok) {
+        alert('Failed to save profile settings.');
+        setProfileSaving(false);
+        return;
+      }
+      const supabase = getSupabase();
+      await supabase.from('users').update({ display_name: profileForm.displayName }).eq('id', uid);
+      alert('Profile settings updated successfully!');
+    } catch {
+      alert('Failed to save profile settings.');
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const handlePasswordUpdate = (e: React.FormEvent) => {
@@ -272,7 +323,7 @@ export default function InfluencerSettingsPage() {
                   </div>
                   
                   <div className="flex justify-end pt-4 border-t border-secondary-200">
-                    <Button type="submit" className="bg-gradient-to-r from-primary-600 to-primary-700">
+                    <Button type="submit" className="bg-gradient-to-r from-primary-600 to-primary-700" loading={profileSaving}>
                       <Save className="w-4 h-4 mr-2" />
                       Save Changes
                     </Button>

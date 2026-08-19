@@ -52,6 +52,27 @@ export default function ZernioConnections({ userId }: ZernioConnectionsProps) {
     load();
   }, [load]);
 
+  // Handle the OAuth callback redirect: after the platform authorization,
+  // Zernio redirects the browser back to us (?connected=1) and we sync + show
+  // a success banner. Error is carried via ?error=... from the platform.
+  useEffect(() => {
+    const qs = new URLSearchParams(window.location.search);
+    const errorParam = qs.get('error');
+    const connected = qs.get('connected');
+    const platform = qs.get('platform');
+    if (!errorParam && connected !== '1') return;
+
+    window.history.replaceState({}, '', window.location.pathname);
+    if (errorParam) {
+      setError(`Connection failed: ${errorParam}`);
+      return;
+    }
+    const pname = PLATFORM_LIST.find((p) => p.id === platform)?.name || platform || 'Social';
+    setMessage(`Your ${pname} account was connected successfully.`);
+    handleSync();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const connected = accounts.filter((a) => a.is_connected);
 
   const openModal = () => {
@@ -90,12 +111,14 @@ export default function ZernioConnections({ userId }: ZernioConnectionsProps) {
         setError(json.error || 'Failed to start connection.');
         return;
       }
-      // Open Zernio-hosted OAuth; account appears in the profile on success.
+      // Open the platform's own OAuth page in a new tab; on completion the
+      // browser returns to PulseHub (?connected=1) and the account syncs
+      // automatically.
       window.open(json.authUrl, '_blank');
       setPending({ platform: selectedPlatform, name: accountName.trim() });
       setModalOpen(false);
       setMessage(
-        `Complete the ${PLATFORM_LIST.find((p) => p.id === selectedPlatform)?.name || selectedPlatform} authorization in the new tab, then click "Sync" to add the account.`
+        `Authorize in the new tab — you'll be brought back to PulseHub and the ${PLATFORM_LIST.find((p) => p.id === selectedPlatform)?.name || selectedPlatform} account will be added automatically.`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection failed.');

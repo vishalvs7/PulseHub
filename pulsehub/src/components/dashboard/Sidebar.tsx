@@ -5,7 +5,6 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  LayoutDashboard,
   BarChart3,
   Megaphone,
   Send,
@@ -26,6 +25,7 @@ import {
   Sparkles,
   Menu,
   X,
+  CalendarClock,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -48,18 +48,20 @@ interface SidebarProps {
 function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
   const base = `/${type}/${uid}`;
   const newPost = { name: 'New Post', href: `${base}/posting`, icon: Send };
+  const analytics = { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 };
+  const posts = { name: 'Posts', href: `${base}/posts`, icon: CalendarClock };
   const connections = { name: 'Accounts', href: `${base}/connections`, icon: Users };
   const deals = { name: 'Deals', href: `${base}/deals`, icon: Handshake };
 
   if (type === 'brand') {
     return [
-      { name: 'Dashboard', href: base, icon: LayoutDashboard },
-      { name: 'New Post', href: newPost.href, icon: newPost.icon },
+      newPost,
+      analytics,
+      posts,
       { name: 'Explore Influencers', href: `${base}/explore`, icon: Users },
-      { name: 'Deals', href: deals.href, icon: deals.icon },
+      deals,
       { name: 'Comments', href: `${base}/comments`, icon: MessagesSquare },
-      { name: connections.name, href: connections.href, icon: connections.icon },
-      { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
+      connections,
       { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
       { name: 'Campaigns', href: `${base}/campaigns`, icon: Megaphone },
       { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
@@ -70,14 +72,14 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarItem[] {
     ];
   }
   return [
-    { name: 'Dashboard', href: base, icon: LayoutDashboard },
-    { name: 'New Post', href: newPost.href, icon: newPost.icon },
-    { name: 'Deals', href: deals.href, icon: deals.icon },
-    { name: 'Comments', href: `${base}/comments`, icon: MessagesSquare },
-    { name: connections.name, href: connections.href, icon: connections.icon },
-    { name: 'Analytics', href: `${base}/analytics`, icon: BarChart3 },
-    { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
+    newPost,
+    analytics,
     { name: 'Profile', href: `${base}/profile`, icon: UserCircle },
+    posts,
+    connections,
+    deals,
+    { name: 'Comments', href: `${base}/comments`, icon: MessagesSquare },
+    { name: 'AI Studio', href: `${base}/ai`, icon: Sparkles },
     { name: 'Best Time to Post', href: `${base}/best-time-to-post`, icon: Clock },
     { name: 'Comment-to-DM', href: `${base}/comment-to-dm`, icon: Bot },
     { name: 'Academy', href: '/academy', icon: GraduationCap },
@@ -105,7 +107,7 @@ function SidebarContent({
       {/* Logo */}
       <div className="p-6 border-b border-secondary-100">
         <div className="flex items-center justify-between">
-          <Link href={`/${type}/${uid}`} className="flex items-center space-x-3">
+          <Link href={`/${type}/${uid}/posting`} className="flex items-center space-x-3">
             <div className={`w-10 h-10 bg-gradient-to-r from-primary-600 to-primary-700 rounded-lg flex items-center justify-center ${
               collapsed ? 'mx-auto' : ''
             }`}>
@@ -221,7 +223,7 @@ export default function Sidebar(props: SidebarProps) {
     <>
       {/* Mobile top bar */}
       <div className="lg:hidden fixed top-0 inset-x-0 z-40 bg-white border-b border-secondary-200 flex items-center justify-between px-4 py-3">
-        <Link href={`/${props.type}/${props.uid}`} className="flex items-center space-x-2">
+        <Link href={`/${props.type}/${props.uid}/posting`} className="flex items-center space-x-2">
           <div className="w-8 h-8 bg-gradient-to-r from-primary-600 to-primary-700 rounded-lg flex items-center justify-center">
             <Zap className="w-5 h-5 text-white" />
           </div>

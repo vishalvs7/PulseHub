@@ -108,7 +108,7 @@ export async function POST(req: NextRequest) {
     // Persist local record.
     const now = new Date();
     const scheduledAt = body.scheduledFor ? new Date(body.scheduledFor) : null;
-    const status = publishNow ? 'scheduled' : scheduledAt && scheduledAt > now ? 'scheduled' : 'draft';
+    const status = publishNow ? 'published' : scheduledAt && scheduledAt > now ? 'scheduled' : 'draft';
 
     const { data: post, error: postError } = await admin
       .from('posts')
@@ -118,8 +118,9 @@ export async function POST(req: NextRequest) {
         content,
         media_urls: mediaUrls,
         content_type: body.contentType || null,
-        status: publishNow ? 'scheduled' : status,
+        status,
         scheduled_for: body.scheduledFor || null,
+        published_at: publishNow ? new Date().toISOString() : null,
       })
       .select()
       .single();
@@ -134,7 +135,7 @@ export async function POST(req: NextRequest) {
         platform: p.platform,
         content: p.customContent || content,
         media_urls: mediaUrls,
-        status: publishNow ? 'scheduled' : 'scheduled',
+        status,
         scheduled_for: body.scheduledFor || null,
         platform_post_id: postId,
       }))
@@ -167,6 +168,76 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Post failed';
+    const status = message === 'Unauthorized' ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+// GET → list the user's scheduled + past posts straight from Zernio.
+export async function GET(req: NextRequest) {
+  try {
+    const user = await requireUser();
+    const admin = getAdmin();
+    const status = req.nextUrl.searchParams.get('status') || undefined;
+
+    const { data: userRow } = await admin
+      .from('users')
+      .select('zernio_profile_id')
+      .eq('id', user.id)
+      .single();
+
+    const profileId = userRow?.zernio_profile_id || undefined;
+    if (!profileId) {
+      return NextResponse.json({ posts: [] });
+    }
+
+    const posts = await ZernioService.listPosts(profileId, status);
+
+    return NextResponse.json({
+      posts: posts.map((p) => ({
+        id: p._id,
+        content: p.content || '',
+        status: p.status || 'draft',
+        scheduledFor: p.scheduledFor || null,
+        timezone: p.timezone || 'UTC',
+        createdAt: p.createdAt || null,
+        publishedAt: p.publishedAt || null,
+        title: p.title || '',
+        platforms: (p.platforms || []).map((x) => ({ platform: x.platform, status: x.status || p.status })),
+        media: (p.mediaItems || []).map((m) => ({ type: m.type, url: m.url })),
+      })),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to list posts';
+    const status = message === 'Unauthorized' ? 401 : 500;
+    return NextResponse.json({ error: message }, { status });
+  }
+}
+
+// DELETE → cancel a scheduled post (and mark it locally).
+export async function DELETE(req: NextRequest) {
+  try {
+    const user = await requireUser();
+    const postId = req.nextUrl.searchParams.get('id');
+    if (!postId) {
+      return NextResponse.json({ error: 'Missing post id' }, { status: 400 });
+    }
+
+    await ZernioService.cancelPost(postId);
+
+    const admin = getAdmin();
+    await admin
+      .from('posts')
+      .update({ status: 'failed' })
+      .in('id', (await admin
+        .from('post_targets')
+        .select('post_id')
+        .eq('user_id', user.id)
+        .eq('platform_post_id', postId))?.data?.map((r: any) => r.post_id) || []);
+
+    return NextResponse.json({ success: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to cancel post';
     const status = message === 'Unauthorized' ? 401 : 500;
     return NextResponse.json({ error: message }, { status });
   }
