@@ -50,6 +50,7 @@ function addMetrics(target: Metrics, src: Record<string, unknown>) {
   target.clicks += num(src.clicks);
   target.reach += num(src.reach);
   target.impressions += num(src.impressions);
+  target.engagement += num(src.likes) + num(src.comments) + num(src.shares) + num(src.saves);
   const rate = num(src.engagementRate);
   if (rate > 0) {
     target.rateSum += rate * num(src.impressions);
@@ -114,20 +115,42 @@ export async function GET(req: NextRequest) {
 
     // Follower counts are refreshed once a day by Zernio.
     let followerAccounts: Record<string, unknown>[] = [];
+    let followerSeries: Record<string, { date?: string; followers?: number }[]> = {};
     try {
       const fs = await ZernioService.getFollowerStats({ profileId, fromDate, toDate });
       followerAccounts = fs.accounts || [];
+      followerSeries = (fs.stats || {}) as Record<string, { date?: string; followers?: number }[]>;
     } catch {
       // Follower stats can be unavailable without the add-on; analytics still work.
     }
 
     const followersByAccount = new Map<string, { followers: number; growth: number }>();
+    const platformByAccount = new Map<string, string>();
     for (const a of followerAccounts) {
       followersByAccount.set(String(a._id || ''), {
         followers: typeof a.currentFollowers === 'number' ? a.currentFollowers : 0,
         growth: typeof a.growth === 'number' ? a.growth : 0,
       });
+      if (a.platform) platformByAccount.set(String(a._id || ''), String(a.platform).toLowerCase());
     }
+
+    // Aggregate daily follower counts per platform for the trend chart.
+    const dailyByPlatform = new Map<string, Map<string, number>>();
+    for (const [accountId, points] of Object.entries(followerSeries)) {
+      const platform = platformByAccount.get(accountId) || 'unknown';
+      const daily = dailyByPlatform.get(platform) || new Map<string, number>();
+      for (const pt of points || []) {
+        const date = String(pt.date || '').slice(0, 10);
+        const followers = typeof pt.followers === 'number' ? pt.followers : 0;
+        if (date) daily.set(date, (daily.get(date) || 0) + followers);
+      }
+      dailyByPlatform.set(platform, daily);
+    }
+    const followerTrend = Array.from(dailyByPlatform.entries())
+      .flatMap(([platform, daily]) =>
+        Array.from(daily.entries()).map(([date, followers]) => ({ date, platform, followers }))
+      )
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     // Fetch analytics pages until we have all posts (capped).
     const platformTotals = new Map<string, Metrics>();
@@ -280,6 +303,7 @@ export async function GET(req: NextRequest) {
       posts,
       postsTotal,
       lastSync,
+      followerTrend,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load analytics';

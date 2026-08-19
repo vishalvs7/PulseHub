@@ -300,6 +300,34 @@ export class ZernioService {
     await zernioFetch(`/posts/${encodeURIComponent(postId)}`, { method: 'DELETE' });
   }
 
+  // ---- Comments inbox ----
+
+  static async listCommentPosts(opts: {
+    profileId?: string;
+    platform?: string;
+    limit?: number;
+  }): Promise<Record<string, unknown>> {
+    const qs = new URLSearchParams({ limit: String(opts.limit || 50) });
+    if (opts.profileId) qs.set('profileId', opts.profileId);
+    if (opts.platform) qs.set('platform', opts.platform);
+    return zernioFetch(`/inbox/comments?${qs.toString()}`);
+  }
+
+  static async getPostComments(postId: string, accountId: string): Promise<Record<string, unknown>> {
+    const qs = new URLSearchParams({ accountId });
+    return zernioFetch(`/inbox/comments/${encodeURIComponent(postId)}?${qs.toString()}`);
+  }
+
+  static async replyToComment(
+    postId: string,
+    input: { accountId: string; message: string; commentId?: string }
+  ): Promise<Record<string, unknown>> {
+    return zernioFetch(`/inbox/comments/${encodeURIComponent(postId)}`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  }
+
   // ---- Analytics ----
 
   static async getAnalytics(opts: {

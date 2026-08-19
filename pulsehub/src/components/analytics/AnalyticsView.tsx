@@ -23,6 +23,7 @@ import BrandIcon from '@/components/posting/BrandIcon';
 import type { CrossPostPlatform } from '@/lib/socialPlatforms';
 import { PLATFORM_CONFIGS, PLATFORM_LIST } from '@/lib/socialPlatforms';
 import { formatNumber } from '@/lib/utils';
+import { LineChart, DonutChart, GroupedBarChart, platformColor } from './charts';
 
 interface MetricsTotals {
   posts: number;
@@ -85,6 +86,7 @@ interface AnalyticsData {
   posts: PostRow[];
   postsTotal: number;
   lastSync: string | null;
+  followerTrend: { date: string; platform: string; followers: number }[];
 }
 
 const DAY_OPTIONS = [
@@ -215,6 +217,87 @@ export default function AnalyticsView({ userId }: { userId: string }) {
         </Card>
       ) : (
         <>
+          {/* Charts — every bar/slice is one platform; nothing is summed across platforms. */}
+          {(() => {
+            const trendSeries = Object.entries(
+              (data.followerTrend || []).reduce<Record<string, { x: string; y: number }[]>>((acc, pt) => {
+                (acc[pt.platform] = acc[pt.platform] || []).push({ x: pt.date, y: pt.followers });
+                return acc;
+              }, {})
+            ).map(([platform, points]) => ({ label: platformName(platform), color: platformColor(platform), points }));
+
+            const engagementSegments = data.platforms
+              .map((p) => ({ label: platformName(p.platform), value: p.totals.engagement, color: platformColor(p.platform) }))
+              .filter((s) => s.value > 0);
+
+            const likeBar = data.platforms.map((p) => ({
+              label: platformName(p.platform),
+              values: [
+                { label: 'Likes', value: p.totals.likes, color: '#E1306C' },
+                { label: 'Comments', value: p.totals.comments, color: '#0A66C2' },
+                { label: 'Shares', value: p.totals.shares, color: '#22C55E' },
+              ],
+            }));
+
+            const reachBar = data.platforms.map((p) => ({
+              label: platformName(p.platform),
+              values: [
+                { label: 'Reach', value: p.totals.reach, color: '#8B5CF6' },
+                { label: 'Impressions', value: p.totals.impressions, color: '#06B6D4' },
+              ],
+            }));
+
+            return (
+              <>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <Card className="lg:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Follower Growth</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <LineChart series={trendSeries} />
+                      <div className="flex flex-wrap gap-4 justify-center mt-2">
+                        {trendSeries.map((s) => (
+                          <span key={s.label} className="flex items-center gap-1.5 text-xs text-secondary-600">
+                            <span className="w-3 h-3 rounded-sm" style={{ background: s.color }} />
+                            {s.label}
+                          </span>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Engagement Share</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <DonutChart segments={engagementSegments} centerLabel="engagements" />
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <Card className="lg:col-span-2">
+                    <CardHeader>
+                      <CardTitle>Likes · Comments · Shares by platform</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <GroupedBarChart groups={likeBar} />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Reach vs Impressions</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <GroupedBarChart groups={reachBar} height={220} />
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            );
+          })()}
+
           {/* Per-platform sections — never aggregated across platforms. */}
           <div className="space-y-6">
             {data.platforms.map((p) => (
@@ -387,9 +470,9 @@ export default function AnalyticsView({ userId }: { userId: string }) {
             </Card>
           )}
 
-          {/* Note: intentionally no cross-platform totals. */}
+          {/* Note: charts compare platforms side by side; totals are never added across platforms. */}
           <p className="text-xs text-secondary-400 text-center">
-            All numbers are per platform — likes, comments and shares are never combined across platforms.
+            Every chart compares platforms side by side — like counts, comments and shares are never added together across platforms.
             <TrendingUp className="inline w-3 h-3 ml-1 mb-0.5" />
           </p>
         </>
