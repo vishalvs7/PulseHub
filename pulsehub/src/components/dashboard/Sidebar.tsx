@@ -40,7 +40,6 @@ interface SidebarItem {
 
 interface SidebarGroup {
   name: string;
-  href: string;
   icon: React.ComponentType<{ className?: string }>;
   children: SidebarItem[];
 }
@@ -70,7 +69,6 @@ function buildItems(type: 'brand' | 'influencer', uid: string): SidebarEntry[] {
 
   const aiStudio: SidebarGroup = {
     name: 'AI Studio',
-    href: `${base}/ai`,
     icon: Sparkles,
     children: [
       { name: 'Transcript to Clip', href: `${base}/ai/transcript-to-clip`, icon: Scissors },
@@ -175,41 +173,30 @@ function SidebarContent({
         {items.map((item) => {
           if (isGroup(item)) {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
-            const childActive = isActive || item.children.some((c) => pathname === c.href);
+            const childActive = item.children.some((c) => pathname === c.href);
             const open = openGroups[item.name] ?? childActive;
             return (
               <div key={item.name}>
-                <div
-                  className={`flex items-center w-full rounded-lg transition-all ${
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(item.name, open)}
+                  className={`w-full flex items-center ${
+                    collapsed ? 'justify-center px-3' : 'space-x-3 px-4'
+                  } py-3 rounded-lg transition-all ${
                     childActive
                       ? 'bg-primary-50 text-primary-700 border-l-4 border-primary-600'
                       : 'text-secondary-700 hover:bg-secondary-50'
                   }`}
                 >
-                  <Link
-                    href={item.href}
-                    onClick={onNavigate}
-                    className={`flex items-center flex-1 min-w-0 py-3 ${collapsed ? 'justify-center px-3' : 'space-x-3 pl-4'}`}
-                  >
-                    <Icon className={`w-5 h-5 shrink-0 ${childActive ? 'text-primary-600' : 'text-secondary-400'}`} />
-                    {!collapsed && <span className="font-medium truncate">{item.name}</span>}
-                  </Link>
-                  {!collapsed && (
-                    <button
-                      type="button"
-                      onClick={() => toggleGroup(item.name, open)}
-                      className="pr-2 pl-1 py-3 shrink-0 hover:text-secondary-900"
-                      aria-label={open ? `Collapse ${item.name}` : `Expand ${item.name}`}
-                    >
-                      {open ? (
-                        <ChevronUp className="w-4 h-4 text-secondary-400" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4 text-secondary-400" />
-                      )}
-                    </button>
-                  )}
-                </div>
+                  <Icon className={`w-5 h-5 shrink-0 ${childActive ? 'text-primary-600' : 'text-secondary-400'}`} />
+                  {!collapsed && <span className="font-medium truncate flex-1 text-left">{item.name}</span>}
+                  {!collapsed &&
+                    (open ? (
+                      <ChevronUp className="w-4 h-4 text-secondary-400 shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-secondary-400 shrink-0" />
+                    ))}
+                </button>
                 {open && !collapsed && (
                   <div className="mt-1 space-y-0.5">
                     {item.children.map((child) => {
