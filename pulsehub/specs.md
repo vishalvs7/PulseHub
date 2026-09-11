@@ -477,8 +477,8 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 
 | Phase | Platforms | Status |
 |---|---|---|
-| **Phase 1 (done)** | Instagram, Facebook, Threads | ✅ Built + Proxy Wired |
-| **Phase 2 (done)** | LinkedIn | ✅ Built + Proxy Wired |
+| **Phase 1 (done)** | Instagram, Facebook, Threads | ✅ Built + Proxy Wired + Deployed |
+| **Phase 2 (done)** | LinkedIn | ✅ Built + Proxy Wired + Deployed |
 | **Phase 3 (next)** | YouTube, Reddit, Pinterest | Building |
 | **Phase 4** | X/Twitter | Planned |
 | **Phase 5** | TikTok | Planned (approval gated) |
@@ -497,10 +497,13 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 | **5** | OAuth orchestrator (connect → callback → select) | ✅ Done |
 | **6** | Publishing service (cross-platform posting) | ✅ Done |
 | **7** | Comments & inbox service | ✅ Done |
-| **8** | Analytics service | ✅ Done |
+| **8** | Analytics service (post insights, follower stats, trends) | ✅ Done |
 | **9** | Proxy wiring (all Zernio routes → self-hosted) | ✅ Done |
 | **10** | Pre-test audit + bug fixes | ✅ Done (9 bugs fixed) |
-| **11** | End-to-end testing | 🟡 Awaiting app approvals |
+| **11** | Module-level createClient fixes (Vercel build) | ✅ Done (9 files) |
+| **12** | Background analytics snapshot cron | ✅ Done (daily) |
+| **13** | Deploy to Growphile Vercel | ✅ Live at pulsehub-wine.vercel.app |
+| **14** | End-to-end testing | 🟡 Blocked — Supabase project paused |
 
 ### Pre-Test Audit Fixes (All 9 resolved)
 
@@ -513,7 +516,91 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 | MEDIUM | `listCommentPosts` Supabase nested filter broken | Moved filtering to client-side (Supabase can't filter joined tables with `.eq()`) |
 | MEDIUM | LinkedIn adapter always posted as organization | Now detects person vs org IDs — `urn:li:person:*` for UUIDs, `urn:li:organization:*` for numeric |
 
+### Vercel Build Fixes (9 files)
+
+All API routes and providers had `const supabase = createClient(...)` at module level, which crashes during Next.js build (env vars not yet injected). Fixed by converting to lazy `getSupabase()` functions:
+
+- `src/app/api/social/connect/route.ts`
+- `src/app/api/social/posts/route.ts`
+- `src/app/api/social/select/route.ts`
+- `src/app/api/social/sync/route.ts`
+- `src/app/api/social/upload/route.ts`
+- `src/app/api/social/comments/route.ts`
+- `src/app/api/social/analytics/route.ts`
+- `src/services/social/selfHosted/selfHosted.provider.ts`
+- `src/services/social/zernio/zernio.provider.ts`
+
+### Deployments
+
+| Environment | Account | URL | Status |
+|---|---|---|---|
+| **Production** | growphilebusiness@gmail.com | https://pulsehub-wine.vercel.app | ✅ Live |
+| Old (deprecated) | ampglobal2025@gmail.com | prepost-app.vercel.app | ❌ Token removed |
+
+- `SOCIAL_PROVIDER=selfhosted` — self-hosted adapters active, Zernio routes delegate to self-hosted
+- Deployed via CLI token (manual deploy, no GitHub auto-deploy)
+- Daily cron at `/api/cron/analytics-snapshot` saves follower snapshots at midnight UTC
+
 **Detailed blueprint:** See `docs/SELF_HOSTED_SOCIAL_API_BLUEPRINT.md` for full architecture, code-level details, and risk mitigation.
+
+---
+
+# Analytics — Current State & Deferred Work
+
+> **Note:** Analytics is fully wired in code but blocked on Supabase being paused. Once the project is resumed, the full analytics pipeline will work end-to-end.
+
+### What Analytics Now Shows (Self-Hosted Path)
+
+| Metric | Source | Status |
+|---|---|---|
+| Follower count per platform | `adapter.getFollowerStats()` → live API call | ✅ Working |
+| Per-post impressions | `adapter.getPostInsights()` → live API call | ✅ Working |
+| Per-post reach | `adapter.getPostInsights()` → live API call | ✅ Working |
+| Per-post likes, comments, shares | `adapter.getPostInsights()` → live API call | ✅ Working |
+| Per-post saves, views, clicks | `adapter.getPostInsights()` → live API call | ✅ Working |
+| Engagement rate | Calculated as `(likes+comments+shares) / followers * 100` | ✅ Working |
+| Follower trend chart | Reads from `analytics_snapshots` table | ✅ Working (needs cron to populate) |
+| Daily snapshot cron | `/api/cron/analytics-snapshot` → saves follower count per account | ✅ Working (Hobby: 1x/day) |
+
+### What's Different from Zernio Analytics
+
+| Feature | Zernio | Self-Hosted |
+|---|---|---|
+| Follower count | ✅ | ✅ Same |
+| Post insights (reach, impressions) | ✅ | ✅ Same — same platform APIs |
+| Follower trend chart | ✅ | ✅ Same — snapshots populate over time |
+| Background sync frequency | 6-12h | 1x/day (Hobby limit) |
+| Unified inbox (all platforms) | ✅ | ✅ Same — adapter methods exist |
+| Reply to comments | ✅ | ✅ Same — adapter methods exist |
+
+### Adapter Methods Built But Not Yet Tested Live
+
+| Adapter | Method | API Call | Status |
+|---|---|---|---|
+| Meta | `getRecentMedia()` | `GET /{igUserId}/media?fields=id,caption,media_type,timestamp,permalink,like_count,comments_count` | Built, awaiting live test |
+| Meta | `getRecentThreads()` | `GET /{threadsUserId}/threads?fields=id,text,timestamp,media_type` | Built, awaiting live test |
+| Meta | `getPostInsights()` | `GET /{mediaId}/insights?metric=impressions,reach,engagement,saved` | Built, awaiting live test |
+| Meta | `getThreadsInsights()` | `GET /{postId}/insights?metric=impressions,likes,replies,reposts,quotes` | Built, awaiting live test |
+| Meta | `getFollowerStats()` | `GET /{accountId}?fields=followers_count,media_count` | Built, awaiting live test |
+| LinkedIn | `getRecentPosts()` | `GET /ugcPosts?q=authors&authors=List(urn:li:organization:{orgId})` | Built, awaiting live test |
+| LinkedIn | `getPostInsights()` | `GET /organizationalEntityShareStatistics?shares[0]={postUrn}` | Built, awaiting live test |
+| LinkedIn | `getFollowerStats()` | `GET /organizationalEntityShareStatistics` | Built, awaiting live test |
+
+### Deferred: Supabase Project
+
+- **Status:** Paused (free tier auto-pauses after inactivity)
+- **Project URL:** `elsowkdruovxrotbxsmi.supabase.co` — DNS not resolving
+- **Action required:** Resume in Supabase dashboard → project will come back online in ~2 minutes
+- **Impact:** All API routes fail at build time without Supabase env vars; runtime requires live Supabase for auth, account storage, and analytics snapshots
+
+### Deferred: App Approvals
+
+| Platform | App | Status |
+|---|---|---|
+| Meta (IG/FB/Threads) | App ID `28882450258027919` | Not yet submitted for review |
+| LinkedIn | Client ID `77uuuf0gq3wp0e` | Not yet submitted for review |
+
+Until approved, testing must be done in Development mode by adding accounts as testers.
 
 ---
 
