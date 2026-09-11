@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,19 +26,8 @@ interface Metrics {
 }
 
 const emptyMetrics = (): Metrics => ({
-  likes: 0,
-  comments: 0,
-  shares: 0,
-  saves: 0,
-  views: 0,
-  clicks: 0,
-  reach: 0,
-  impressions: 0,
-  engagement: 0,
-  rateSum: 0,
-  rateImpressions: 0,
-  rateCount: 0,
-  posts: 0,
+  likes: 0, comments: 0, shares: 0, saves: 0, views: 0, clicks: 0,
+  reach: 0, impressions: 0, engagement: 0, rateSum: 0, rateImpressions: 0, rateCount: 0, posts: 0,
 });
 
 function addMetrics(target: Metrics, src: Record<string, unknown>) {
@@ -67,25 +57,36 @@ function engagementRate(m: Metrics): number | null {
 
 function summarize(m: Metrics) {
   return {
-    posts: m.posts,
-    likes: m.likes,
-    comments: m.comments,
-    shares: m.shares,
-    saves: m.saves,
-    views: m.views,
-    clicks: m.clicks,
-    reach: m.reach,
-    impressions: m.impressions,
-    engagement: m.engagement,
-    engagementRate: engagementRate(m),
+    posts: m.posts, likes: m.likes, comments: m.comments, shares: m.shares,
+    saves: m.saves, views: m.views, clicks: m.clicks, reach: m.reach,
+    impressions: m.impressions, engagement: m.engagement, engagementRate: engagementRate(m),
   };
 }
 
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser();
-    const admin = getAdmin();
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const daysParam = req.nextUrl.searchParams.get('days');
+      const days = Math.min(Math.max(parseInt(daysParam || '90', 10) || 90, 1), 366);
+      const to = new Date();
+      const from = new Date();
+      from.setDate(to.getDate() - days);
+
+      const analytics = await provider.getAnalytics({
+        userId: user.id,
+        dateFrom: from.toISOString(),
+        dateTo: to.toISOString(),
+      });
+
+      return NextResponse.json(analytics);
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
+    const admin = getAdmin();
     const daysParam = req.nextUrl.searchParams.get('days');
     const days = Math.min(Math.max(parseInt(daysParam || '90', 10) || 90, 1), 366);
 
@@ -104,25 +105,18 @@ export async function GET(req: NextRequest) {
 
     if (!profileId) {
       return NextResponse.json({
-        hasAnalyticsAccess: true,
-        dateRange: { from: fromDate, to: toDate },
-        platforms: [],
-        posts: [],
-        postsTotal: 0,
-        lastSync: null,
+        hasAnalyticsAccess: true, dateRange: { from: fromDate, to: toDate },
+        platforms: [], posts: [], postsTotal: 0, lastSync: null,
       });
     }
 
-    // Follower counts are refreshed once a day by Zernio.
     let followerAccounts: Record<string, unknown>[] = [];
     let followerSeries: Record<string, { date?: string; followers?: number }[]> = {};
     try {
       const fs = await ZernioService.getFollowerStats({ profileId, fromDate, toDate });
       followerAccounts = fs.accounts || [];
       followerSeries = (fs.stats || {}) as Record<string, { date?: string; followers?: number }[]>;
-    } catch {
-      // Follower stats can be unavailable without the add-on; analytics still work.
-    }
+    } catch {}
 
     const followersByAccount = new Map<string, { followers: number; growth: number }>();
     const platformByAccount = new Map<string, string>();
@@ -134,7 +128,6 @@ export async function GET(req: NextRequest) {
       if (a.platform) platformByAccount.set(String(a._id || ''), String(a.platform).toLowerCase());
     }
 
-    // Aggregate daily follower counts per platform for the trend chart.
     const dailyByPlatform = new Map<string, Map<string, number>>();
     for (const [accountId, points] of Object.entries(followerSeries)) {
       const platform = platformByAccount.get(accountId) || 'unknown';
@@ -152,7 +145,6 @@ export async function GET(req: NextRequest) {
       )
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Fetch analytics pages until we have all posts (capped).
     const platformTotals = new Map<string, Metrics>();
     const accountTotals = new Map<string, Metrics>();
     const accountMeta = new Map<string, { platform: string; username: string }>();
@@ -165,14 +157,7 @@ export async function GET(req: NextRequest) {
     for (let page = 1; page <= MAX_PAGES; page++) {
       let data: Record<string, unknown>;
       try {
-        data = await ZernioService.getAnalytics({
-          profileId,
-          fromDate,
-          toDate,
-          limit: PAGE_SIZE,
-          page,
-          sortBy: 'date',
-        });
+        data = await ZernioService.getAnalytics({ profileId, fromDate, toDate, limit: PAGE_SIZE, page, sortBy: 'date' });
       } catch (err) {
         const status = (err as { status?: number })?.status;
         if (status === 402 || status === 403) {
@@ -195,7 +180,6 @@ export async function GET(req: NextRequest) {
       if (!lastSync && overview && typeof overview.lastSync === 'string') lastSync = overview.lastSync;
 
       const postList = (data.posts || []) as Record<string, unknown>[];
-
       postList.forEach((post) => {
         const content = (post.content as string) || '';
         const publishedAt = (post.publishedAt as string) || (post.scheduledFor as string) || null;
@@ -204,12 +188,7 @@ export async function GET(req: NextRequest) {
         const mediaType = (post.mediaType as string) || null;
         const platforms = (post.platforms || []) as Record<string, unknown>[];
         const fallbackPlatform = (post.platform as string) || '';
-
-        const targets = platforms.length > 0
-          ? platforms
-          : fallbackPlatform
-            ? [{ platform: fallbackPlatform, analytics: post.analytics, accountUsername: post.accountUsername || null }]
-            : [];
+        const targets = platforms.length > 0 ? platforms : fallbackPlatform ? [{ platform: fallbackPlatform, analytics: post.analytics, accountUsername: post.accountUsername || null }] : [];
 
         for (const t of targets) {
           const platform = String(t.platform || '').toLowerCase();
@@ -232,15 +211,8 @@ export async function GET(req: NextRequest) {
           }
 
           rows.push({
-            postId,
-            content,
-            publishedAt,
-            platform,
-            accountId,
-            accountUsername: username || null,
-            platformPostUrl: t.platformPostUrl || null,
-            thumbnailUrl,
-            mediaType,
+            postId, content, publishedAt, platform, accountId, accountUsername: username || null,
+            platformPostUrl: t.platformPostUrl || null, thumbnailUrl, mediaType,
             status: t.status || post.status || null,
             metrics: {
               likes: typeof m.likes === 'number' ? m.likes : 0,
@@ -262,7 +234,6 @@ export async function GET(req: NextRequest) {
       if (page >= totalPages) break;
     }
 
-    // Build per-platform aggregates with per-account breakdown.
     const platforms = Array.from(platformTotals.entries())
       .map(([platform, totals]) => {
         const accountRows = Array.from(accountTotals.entries())
@@ -271,10 +242,8 @@ export async function GET(req: NextRequest) {
             if (!meta || meta.platform !== platform) return null;
             const f = followersByAccount.get(accountId);
             return {
-              accountId,
-              username: meta.username,
-              followers: f?.followers ?? 0,
-              followerGrowth: f?.growth ?? 0,
+              accountId, username: meta.username,
+              followers: f?.followers ?? 0, followerGrowth: f?.growth ?? 0,
               totals: { ...summarize(at), posts: at.posts },
             };
           })
@@ -284,11 +253,8 @@ export async function GET(req: NextRequest) {
         const totalFollowers = accountRows.reduce((s, a) => s + a.followers, 0);
         const totalGrowth = accountRows.reduce((s, a) => s + a.followerGrowth, 0);
         return {
-          platform,
-          followers: totalFollowers,
-          followerGrowth: totalGrowth,
-          totals: { ...summarize(totals), posts: totals.posts },
-          accounts: accountRows,
+          platform, followers: totalFollowers, followerGrowth: totalGrowth,
+          totals: { ...summarize(totals), posts: totals.posts }, accounts: accountRows,
         };
       })
       .sort((a, b) => b.totals.engagement - a.totals.engagement);
@@ -296,14 +262,8 @@ export async function GET(req: NextRequest) {
     const posts = rows.sort((a, b) => String(b.publishedAt || '').localeCompare(String(a.publishedAt || '')));
 
     return NextResponse.json({
-      hasAnalyticsAccess,
-      analyticsError,
-      dateRange: { from: fromDate, to: toDate },
-      platforms,
-      posts,
-      postsTotal,
-      lastSync,
-      followerTrend,
+      hasAnalyticsAccess, analyticsError, dateRange: { from: fromDate, to: toDate },
+      platforms, posts, postsTotal, lastSync, followerTrend,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load analytics';

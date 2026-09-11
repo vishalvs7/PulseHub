@@ -469,22 +469,51 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - **UI polish:** step-1 cards show dotted aspect shapes + real brand logos (react-icons, incl. TikTok/Threads/Pinterest/Reddit not in lucide); brand logos reused across step-2 platform picker, char counters, preview headers; sidebar "Connections" tab renamed to **"Accounts"**.
 - **Verified headless:** per-type platform filtering (document → LinkedIn/X/FB/Reddit; long video → no TikTok; vertical → IG/TikTok/YouTube/FB), destination badges, preview frames, schedule step; `npm run build` green; production responding 200 after auto-deploy.
 
-## Next Steps
+## Next Steps — Self-Hosted Unified Social API (Primary Track)
 
-**Parallel Track A — Self-Hosted Unified Social API (top priority, non-breaking):**
-1. Reverse-engineer the current `ZernioService` + route shapes into a locked API contract (Phase P0)
-2. Stand up the new API service with `SOCIAL_PROVIDER=zernio|selfhosted` flag (default zernio) — P1
-3. Implement adapters one platform at a time (posts → comments → analytics) — P2
-4. Soak test, flip to selfhosted, remove Zernio, own pricing — P3/P4
+> **Decision:** Replace Zernio with our own unified API. Phase 1 targets **Instagram, Facebook, and Threads** (all Meta ecosystem — single OAuth). Other platforms come later and show "Coming Soon" in the UI until integrated.
 
-**Parallel Track B — Website features (unchanged, keep shipping):**
-5. Migrate `src/middleware.ts` → `proxy` convention to clear the deployment warning
-6. Set up real platform OAuth credentials (IG Graph, X, LinkedIn, Reddit) + app review
-7. Build real-time chat (Supabase Realtime) + Deals state machine
-8. Build the background engines, queues & data ingestion pipeline (sections 1–4) — these double as the new API's machinery
-9. Build the admin panel (overview + user management first; needs `users.status` column + admin RLS write policies)
-10. Wire the campaign flow end-to-end (create → launch → offer → accept) — service exists, UI buttons currently dead
-11. Extend the composer AI prompt with explicit tone/keyword fields
+### Platform Roadmap
+
+| Phase | Platforms | Status |
+|---|---|---|
+| **Phase 1 (done)** | Instagram, Facebook, Threads | ✅ Built + Proxy Wired |
+| **Phase 2 (done)** | LinkedIn | ✅ Built + Proxy Wired |
+| **Phase 3 (next)** | YouTube, Reddit, Pinterest | Building |
+| **Phase 4** | X/Twitter | Planned |
+| **Phase 5** | TikTok | Planned (approval gated) |
+| **Future** | Snapchat, Discord | Considered |
+
+> **Why Instagram + Facebook + Threads first:** All three use the Meta Graph API. One Facebook App, one OAuth flow, one adapter serves all three. This is the highest-leverage starting point.
+
+### Build Status
+
+| Step | What | Status |
+|---|---|---|
+| **1** | Normalized API contract + `SOCIAL_PROVIDER` flag | ✅ Done |
+| **2** | Meta adapter (Instagram + Facebook + Threads) | ✅ Done |
+| **3** | LinkedIn adapter | ✅ Done |
+| **4** | Token vault + encryption + refresh | 🟡 Deferred (not blocking) |
+| **5** | OAuth orchestrator (connect → callback → select) | ✅ Done |
+| **6** | Publishing service (cross-platform posting) | ✅ Done |
+| **7** | Comments & inbox service | ✅ Done |
+| **8** | Analytics service | ✅ Done |
+| **9** | Proxy wiring (all Zernio routes → self-hosted) | ✅ Done |
+| **10** | Pre-test audit + bug fixes | ✅ Done (9 bugs fixed) |
+| **11** | End-to-end testing | 🟡 Awaiting app approvals |
+
+### Pre-Test Audit Fixes (All 9 resolved)
+
+| Severity | Issue | Fix |
+|---|---|---|
+| CRITICAL | `[platform]/callback` used browser Supabase client server-side | Switched to server-side `createClient` with service role key |
+| HIGH | `createPost` used `accountId` as userId for token lookup | Added `userId` to `CreatePostInput`, uses `input.userId` |
+| HIGH | Posts stored with wrong `user_id` in DB | Same fix — `input.userId` used for DB insert |
+| MEDIUM | `completeSelection` stored empty username | Looks up existing account username before storing |
+| MEDIUM | `listCommentPosts` Supabase nested filter broken | Moved filtering to client-side (Supabase can't filter joined tables with `.eq()`) |
+| MEDIUM | LinkedIn adapter always posted as organization | Now detects person vs org IDs — `urn:li:person:*` for UUIDs, `urn:li:organization:*` for numeric |
+
+**Detailed blueprint:** See `docs/SELF_HOSTED_SOCIAL_API_BLUEPRINT.md` for full architecture, code-level details, and risk mitigation.
 
 ---
 
@@ -635,14 +664,49 @@ Social analytics APIs (impressions, reach, shares, video view duration) are comp
 
 ## 5. Self-Hosted Unified Social API (Replace Zernio)
 
-**Goal:** Build our own unified social API aggregator (functionally equivalent to Zernio) so we can remove the Zernio dependency entirely, own the OAuth/rate-limit/token lifecycle, and set our own pricing tiers. **This is a parallel track — it must never regress current website features. The swap only happens when the new API is feature-complete and verified end-to-end.**
+**Goal:** Build our own unified social API aggregator (functionally equivalent to Zernio) so we can remove the Zernio dependency entirely, own the OAuth/rate-limit/token lifecycle, and set our own pricing tiers. **This is the primary track — it must never regress current website features. The swap only happens when the new API is feature-complete and verified end-to-end.**
 
 ### Why
 - Zernio is the only hard external dependency today: OAuth connect, cross-posting, comments, analytics all route through it.
 - Removing it means full control over pricing, platform coverage, rate limits, and data.
 - The background engines from sections 1–4 are the same machinery this API needs — building them here is building the replacement.
 
-### Target API Surface (drop-in replacement for current `/api/social/zernio/*` routes)
+### Phase 1 Platforms: Instagram + Facebook + Threads
+
+All three platforms use the **Meta Graph API** — same OAuth flow, same app, one adapter serves all three.
+
+| Platform | API Base | Posting | Comments | Analytics | Notes |
+|---|---|---|---|---|---|
+| **Instagram** | `graph.facebook.com/v21.0` | ✅ Two-step (container → publish) | ✅ Graph API | ✅ Insights API | Requires business/creator account linked to FB Page |
+| **Facebook** | `graph.facebook.com/v21.0` | ✅ Page Feed API | ✅ Page conversations | ✅ Page Insights | Posting only to Pages (not personal profiles) |
+| **Threads** | `graph.threads.net/v1.0` | ✅ Two-step (container → publish) | ✅ Replies API | ✅ Media insights | Text limit 500 chars; 250 posts/day; same Meta app |
+
+**Meta App Permissions Required:**
+
+| Permission | Purpose | App Review |
+|---|---|---|
+| `instagram_basic` | Read IG profile, media | Required |
+| `instagram_content_publish` | Publish to Instagram | Required |
+| `instagram_manage_comments` | Read/reply to IG comments | Required |
+| `pages_read_engagement` | Read FB page insights | Required |
+| `pages_show_list` | List managed FB pages | Required |
+| `pages_manage_posts` | Post to FB pages | Required |
+| `threads_basic` | Read Threads profile/media | Required |
+| `threads_content_publish` | Publish to Threads | Required |
+| `threads_manage_replies` | Read/reply to Threads replies | Required |
+
+### Phase 2 Platform: LinkedIn
+
+| Feature | Status | Notes |
+|---|---|---|
+| Posting | ✅ UGC Post API | Pages only (not personal profiles) |
+| Comments | ✅ Social Actions API | Post comments + replies |
+| Analytics | 🟡 Organization stats | Follower count, impressions |
+| OAuth | Standard OAuth 2.0 | 60-day tokens, no refresh — user must re-authorize |
+| App Review | Required | `w_member_social`, `r_liteprofile`, `w_organization_social` |
+
+### Target API Surface (drop-in replacement for `/api/social/zernio/*` routes)
+
 | Current Zernio route | New self-hosted route | Status |
 |---|---|---|
 | `/api/social/zernio/connect` (+callback/select) | `/api/social/connect` (+ callback/select) | 🟡 Scaffolded (`oauth.service.ts`), needs platform creds |
@@ -659,10 +723,11 @@ The frontend already talks to these routes via `ZernioService` (`src/services/so
 [ PulseHub Web App ]  ──HTTP──►  [ PulseHub Unified Social API (new service) ]
                                      │  exposes /connect /posts /comments /analytics /webhooks
                                      │
-                          ┌──────────┼─────────────┬─────────────┐
-                          ▼          ▼             ▼             ▼
-                     [IG Graph]  [X API v2]   [LinkedIn]    [Reddit/TikTok/YT]
-                     (platform adapters, per-platform OAuth + rate limiting)
+                          ┌──────────┼──────────────┬──────────────┐
+                          ▼          ▼              ▼              ▼
+                    [Meta Adapter] [LinkedIn]   [X/Twitter]   [Reddit/...]
+                    IG+FB+Threads  (Phase 2)    (Phase 3)     (Phase 3+)
+                    (single OAuth)
                           │
                           ▼
                    [ Token Vault (encrypted) ]  ◄── daily rotation cron (section 2)
@@ -685,13 +750,276 @@ refreshToken()          -> proactive rotation (section 2)
 ### Migration Plan (parallel, non-breaking)
 1. **Phase P0 (now):** Lock the normalized API contract to exactly what the frontend consumes today (reverse-engineer `ZernioService` + route response shapes). Document in this spec.
 2. **Phase P1:** Stand up the new API service with stubbed adapters returning the contract. Add a config flag `SOCIAL_PROVIDER=zernio|selfhosted` — default `zernio` so nothing changes in production.
-3. **Phase P2:** Implement adapters one platform at a time behind the flag, verifying each against the live Zernio behavior (posts → comments → analytics). Keep Zernio as fallback for unimplemented platforms.
-4. **Phase P3:** When all in-scope platforms are implemented + verified, flip `SOCIAL_PROVIDER=selfhosted`, run soak tests, then delete Zernio service/routes/env.
-5. **Phase P4:** Own pricing. Gate platform features by subscription tier (posts/month, platforms, comment volume) now that we control the API layer.
+3. **Phase P2:** Implement Meta adapter (IG + FB + Threads) behind the flag. Verify against live Zernio behavior. Keep Zernio as fallback.
+4. **Phase P3:** Implement LinkedIn adapter. Verify.
+5. **Phase P4:** Flip `SOCIAL_PROVIDER=selfhosted`, run soak tests, then delete Zernio service/routes/env.
+6. **Phase P5:** Own pricing. Gate platform features by subscription tier (posts/month, platforms, comment volume).
 
-**Do not:** remove Zernio code or env keys until P3 soak tests pass on production traffic.
+**Do not:** remove Zernio code or env keys until P4 soak tests pass on production traffic.
 
 ### Current Zernio constraints this removes
 - Per-platform OAuth token limits (Zernio's one-account-per-platform model) → we store unlimited accounts in our own vault.
 - Zernio platform coverage/approval gates → we control which platforms and when.
 - Zernio pricing/rate limits → we set our own.
+
+---
+
+## 6. Prerequisites — What We Need Before Building
+
+> **This section defines everything required from you (the developer) before Step 1 of the 10-step plan begins. No code is written until these are in place.**
+
+### A. Meta Developer App (covers Instagram + Facebook + Threads)
+
+**One Meta App serves all three platforms.** Create it once, configure for all three.
+
+| Step | What to do | Where | Time |
+|---|---|---|---|
+| 1 | Create Meta Developer account | [developers.facebook.com](https://developers.facebook.com) | 5 min |
+| 2 | Create a new App → select "Business" type | Meta Developer Dashboard | 5 min |
+| 3 | Add products: **Instagram Graph API**, **Facebook Login**, **Threads API** | App Settings → Products | 10 min |
+| 4 | Set app to **Live Mode** (not Development) | App Settings → Basic | 1 min |
+| 5 | Generate **App ID** + **App Secret** | App Settings → Basic | 1 min |
+| 6 | Set Valid OAuth Redirect URIs: `{YOUR_DOMAIN}/api/social/callback` | Facebook Login → Settings | 5 min |
+| 7 | Enable **Instagram Business Account** login in Facebook Login settings | Facebook Login → Settings | 2 min |
+
+**What to send me after this:**
+```
+META_APP_ID=xxxxxxxxxxxxxxx
+META_APP_SECRET=xxxxxxxxxxxxxxx
+```
+
+### B. LinkedIn Developer App
+
+| Step | What to do | Where | Time |
+|---|---|---|---|
+| 1 | Create LinkedIn Developer account | [linkedin.com/developers](https://linkedin.com/developers) | 5 min |
+| 2 | Create app → select "Share on LinkedIn" product | LinkedIn Developer Portal | 5 min |
+| 3 | Request permissions: `w_member_social`, `r_liteprofile`, `w_organization_social` | Products tab | 5 min |
+| 4 | Generate **Client ID** + **Client Secret** | Auth tab | 1 min |
+| 5 | Set Authorized Redirect URL: `{YOUR_DOMAIN}/api/social/callback` | Auth tab | 2 min |
+
+**What to send me after this:**
+```
+LINKEDIN_CLIENT_ID=xxxxxxxxxxxxxxx
+LINKEDIN_CLIENT_SECRET=xxxxxxxxxxxxxxx
+```
+
+### C. Test Accounts (for development — no app review needed yet)
+
+| Platform | What you need | How to get it |
+|---|---|---|
+| **Instagram** | Instagram Business or Creator account linked to a Facebook Page | Create IG account → Settings → Account → Switch to Professional → Business → Link to FB Page |
+| **Facebook** | A Facebook Page you manage | Create a Page in Facebook (can be a test page) |
+| **Threads** | Threads account linked to the same Instagram account | Download Threads app → Sign in with Instagram |
+| **LinkedIn** | A LinkedIn Company Page | LinkedIn → Work → Create a Company Page |
+
+> **App review can wait.** In Development mode, the app only works for testers you add. Add your own Facebook/LinkedIn accounts as testers and you can test everything end-to-end. App review is only needed when you want other users (non-testers) to connect their accounts.
+
+### D. Environment Variables
+
+Add these to your `.env.local`:
+
+```env
+# === Meta (Instagram + Facebook + Threads) ===
+META_APP_ID=your_app_id
+META_APP_SECRET=your_app_secret
+
+# === LinkedIn ===
+LINKEDIN_CLIENT_ID=your_client_id
+LINKEDIN_CLIENT_SECRET=your_client_secret
+
+# === App URL (for OAuth redirects) ===
+NEXT_PUBLIC_APP_URL=https://prepost-app.vercel.app
+
+# === Self-Hosted API Flag ===
+SOCIAL_PROVIDER=selfhosted  # Flipped from zernio — self-hosted is now active
+```
+
+### E. What You Need to Know
+
+| Topic | Details |
+|---|---|
+| **Meta OAuth flow** | Instagram and Threads use Facebook Login. User clicks "Connect" → redirected to Facebook → authorizes → Facebook redirects to our callback with `code` → we exchange for access token → fetch IG user ID or Threads user ID from the token. Same flow, different user ID at the end. |
+| **Facebook Pages** | Instagram business accounts MUST be linked to a Facebook Page. When we get the token, we call `/me/accounts` to list pages, then check each page for `instagram_business_account`. This is how we know which IG account to post to. |
+| **Threads = Instagram** | Threads uses the same Instagram account. The Threads user ID is different from the Instagram user ID, but they share the same OAuth token. We get the Threads user ID by calling the Threads API with the IG token. |
+| **LinkedIn Pages** | LinkedIn posting only works for Company Pages (not personal profiles). User must select which page to post to. We call `/me/following/organizations` to list pages they manage. |
+| **Token lifetimes** | Meta long-lived tokens = 60 days. LinkedIn tokens = 60 days. No refresh tokens available for LinkedIn — user must re-authorize when expired. For Meta, we can exchange short-lived → long-lived tokens on connect. |
+| **Rate limits** | Meta: 200 calls/user/hour (Instagram), 4800 × impressions / 24h (Threads). LinkedIn: 100 calls/day for some endpoints. We implement exponential backoff for all. |
+| **Two-step publishing** | Instagram and Threads require two API calls: (1) create media container, (2) publish container. This is NOT optional — it's how their API works. We handle this transparently. |
+| **App review timing** | Meta app review takes 1-4 weeks. LinkedIn review takes 1-2 weeks. Submit early. In the meantime, add your accounts as testers in Development mode. |
+
+### F. What I Will Build (You Don't Need to Know)
+
+| Component | What it does |
+|---|---|
+| `MetaAdapter` | Handles IG + FB + Threads — OAuth, posting, comments, analytics |
+| `LinkedInAdapter` | Handles LinkedIn — OAuth, posting, comments, analytics |
+| `TokenVault` | Encrypts and stores OAuth tokens, handles refresh |
+| `OAuthOrchestrator` | Connect → callback → select flow for all platforms |
+| `PublishingService` | Cross-platform post creation + scheduling |
+| `CommentsService` | Unified comment aggregation + reply |
+| `AnalyticsService` | Background cron sync + normalized metrics |
+| `SOCIAL_PROVIDER` flag | Switch between Zernio and self-hosted with one env var |
+
+### G. Summary — Your Pre-Build Checklist
+
+- [x] Meta Developer account created
+- [x] Meta App created with IG Graph API + Facebook Login + Threads API products
+- [x] `META_APP_ID` and `META_APP_SECRET` sent to me
+- [x] LinkedIn Developer account created
+- [x] LinkedIn App created with `w_member_social`, `r_liteprofile`, `w_organization_social`
+- [x] `LINKEDIN_CLIENT_ID` and `LINKEDIN_CLIENT_SECRET` sent to me
+- [ ] Instagram Business account linked to a Facebook Page (for testing)
+- [ ] LinkedIn Company Page created (for testing)
+- [ ] Your Facebook + LinkedIn accounts added as testers in both apps
+- [x] `.env.local` updated with all env vars above
+- [x] `NEXT_PUBLIC_APP_URL` set to `https://prepost-app.vercel.app`
+- [x] `SOCIAL_PROVIDER` flipped to `selfhosted`
+
+**Build complete. Awaiting: app tester approvals + live OAuth testing.**
+
+---
+
+# Monetizable Unified Social API (Phase 2 — Future)
+
+> **Goal:** Expose our self-hosted unified API to external developers, similar to how Zernio operates. This transforms PulseHub from a SaaS product into a platform — developers pay us to use our API for their own apps, tools, and integrations.
+
+## Why This Is a Business
+
+| Competitor | What They Charge | What We Offer |
+|---|---|---|
+| Zernio | $29-99/mo for API access | Same + more platforms |
+| Phyllo | Enterprise pricing ($10k+/yr) | Simpler, cheaper |
+| Buffer API | $100/mo + per-seat | Our API is usage-based |
+| Hootsuite API | Enterprise only | Self-serve tiers |
+
+Our advantage: we already built the adapter pattern, the unified contract, and the proxy layer. Adding API key management on top is incremental.
+
+## What External Developers Get
+
+```
+POST https://api.pulsehub.dev/v1/connect
+  → { platform: "instagram" }
+  → { authUrl: "https://facebook.com/...", state: "abc123" }
+
+POST https://api.pulsehub.dev/v1/posts
+  → { content: "Hello", platforms: [{ platform: "instagram", accountId: "..." }] }
+  → { postId: "xyz", status: "published" }
+
+GET https://api.pulsehub.dev/v1/analytics?platform=instagram
+  → { followers: 12500, impressions: 45000, engagement: 3.2 }
+
+GET https://api.pulsehub.dev/v1/comments?postId=xyz
+  → { comments: [{ author: "...", content: "...", createdAt: "..." }] }
+```
+
+## Pricing Tiers
+
+| Tier | Price | Platforms | API Calls/Month | Connected Accounts | Webhooks |
+|---|---|---|---|---|---|
+| **Free** | $0 | 2 platforms | 1,000 | 2 | ❌ |
+| **Starter** | $19/mo | 4 platforms | 10,000 | 5 | ❌ |
+| **Pro** | $49/mo | All platforms | 50,000 | 20 | ✅ |
+| **Business** | $149/mo | All platforms | 500,000 | Unlimited | ✅ + Priority |
+| **Enterprise** | Custom | Custom | Unlimited | Unlimited | ✅ + SLA |
+
+## Preparations Needed (Before Launch)
+
+### 1. API Key Management
+
+| Component | What It Does | Effort |
+|---|---|---|
+| `api_keys` table | Store key hash, user_id, tier, rate_limit, created_at | 1 hour |
+| Key generation endpoint | `POST /api/v1/keys` → generate key, return once | 2 hours |
+| Key validation middleware | Check `Authorization: Bearer pk_xxx` on every request | 2 hours |
+| Key rotation | `DELETE /api/v1/keys/:id` + `POST /api/v1/keys` | 1 hour |
+
+**Database schema:**
+```sql
+CREATE TABLE public.api_keys (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  key_hash    text NOT NULL UNIQUE,      -- SHA-256 of the actual key
+  key_prefix  text NOT NULL,             -- First 8 chars for display: "pk_abc1..."
+  tier        text DEFAULT 'free' CHECK (tier IN ('free','starter','pro','business','enterprise')),
+  rate_limit  integer DEFAULT 100,       -- calls per minute
+  monthly_limit integer DEFAULT 1000,    -- calls per month
+  monthly_used integer DEFAULT 0,        -- calls used this month
+  is_active   boolean DEFAULT true,
+  created_at  timestamptz DEFAULT now(),
+  last_used_at timestamptz
+);
+```
+
+### 2. Rate Limiting
+
+| Tier | Rate Limit (calls/min) | Monthly Limit |
+|---|---|---|
+| Free | 100 | 1,000 |
+| Starter | 200 | 10,000 |
+| Pro | 500 | 50,000 |
+| Business | 1,000 | 500,000 |
+| Enterprise | Custom | Unlimited |
+
+Implementation: in-memory token bucket per API key, reset monthly via cron.
+
+### 3. Developer Dashboard
+
+| Page | What It Shows |
+|---|---|
+| `/developers` | Overview: current tier, usage this month, API key |
+| `/developers/keys` | List keys, create new, revoke |
+| `/developers/docs` | Interactive API docs (Swagger/OpenAPI) |
+| `/developers/usage` | Usage graphs: calls/day, errors, latency |
+| `/developers/billing` | Upgrade tier, payment history |
+
+### 4. API Versioning
+
+```
+https://api.pulsehub.dev/v1/connect     ← Current (v1)
+https://api.pulsehub.dev/v2/connect     ← Future breaking changes
+```
+
+All routes live under `/api/v1/*` to allow future versioning without breaking existing integrations.
+
+### 5. Webhook System
+
+For Pro+ tiers, notify developers of events:
+
+| Event | Payload |
+|---|---|
+| `post.published` | `{ postId, platform, publishedAt }` |
+| `post.failed` | `{ postId, platform, error }` |
+| `comment.new` | `{ commentId, postId, author, content }` |
+| `token.expired` | `{ accountId, platform, needsReconnection }` |
+
+Webhook registration: `POST /api/v1/webhooks { url: "https://...", events: ["post.published"] }`
+
+### 6. Documentation
+
+- OpenAPI/Swagger spec for the unified API
+- Quickstart guide: "Connect Instagram in 5 minutes"
+- Code examples: Python, Node.js, PHP, Go
+- Changelog: `GET /api/v1/changelog`
+
+## Implementation Timeline (Future)
+
+| Week | What |
+|---|---|
+| 1 | API key management (table + middleware + routes) |
+| 2 | Rate limiting + usage tracking |
+| 3 | Developer dashboard pages |
+| 4 | OpenAPI docs + quickstart guide |
+| 5 | Webhook system |
+| 6 | Billing integration (Stripe) + launch |
+
+## Revenue Projection (Conservative)
+
+| Month | Free Users | Paid Users | MRR |
+|---|---|---|---|
+| 1 | 50 | 5 | $245 |
+| 3 | 200 | 20 | $980 |
+| 6 | 500 | 50 | $2,450 |
+| 12 | 1,500 | 150 | $7,350 |
+
+At scale (1,000 paid users × $49 avg) = **$49,000 MRR** = **$588K ARR**

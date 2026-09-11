@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -11,6 +12,26 @@ const MAX_COMMENTS_PER_POST = 25;
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const platform = req.nextUrl.searchParams.get('platform') as any;
+      const postId = req.nextUrl.searchParams.get('postId');
+      const accountId = req.nextUrl.searchParams.get('accountId');
+
+      // If specific post requested, get its comments
+      if (postId && accountId && platform) {
+        const comments = await provider.getPostComments({ userId: user.id, postId, accountId, platform });
+        return NextResponse.json({ comments });
+      }
+
+      // Otherwise, list posts with comments (inbox view)
+      const posts = await provider.listCommentPosts({ userId: user.id, platform });
+      return NextResponse.json({ posts, comments: [], lastUpdated: new Date().toISOString() });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     const admin = getAdmin();
     const platform = req.nextUrl.searchParams.get('platform') || undefined;
 
@@ -95,6 +116,21 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => ({}));
     const { postId, accountId, message, commentId } = body;
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const reply = await provider.replyToComment({
+        userId: user.id,
+        postId: postId || '',
+        commentId: commentId || '',
+        text: message,
+        platform: body.platform || 'instagram',
+        accountId: accountId || '',
+      });
+      return NextResponse.json({ success: true, data: reply });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     if (!postId || !accountId || !message?.trim()) {
       return NextResponse.json({ error: 'postId, accountId and message are required.' }, { status: 400 });
     }

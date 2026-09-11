@@ -3,6 +3,7 @@ import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
 import { CROSSPOST_PLATFORMS } from '@/lib/socialPlatforms';
 import { CONTENT_TYPE_CONFIGS } from '@/lib/postFormats';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 import type { CrossPostPlatform } from '@/lib/socialPlatforms';
 import type { PostContentType } from '@/lib/postFormats';
 
@@ -13,7 +14,7 @@ interface CreatePostBody {
   content: string;
   mediaUrls?: string[];
   platforms: { platform: CrossPostPlatform; customContent?: string; destination?: string }[];
-  scheduledFor?: string; // ISO string, optional → publish now
+  scheduledFor?: string;
   timezone?: string;
   contentType?: PostContentType;
 }
@@ -40,13 +41,42 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const result = await provider.createPost({
+        userId: user.id,
+        content,
+        platforms: targets.map((t) => ({
+          platform: t.platform,
+          accountId: user.id,
+          customContent: t.customContent,
+          destination: t.destination,
+        })),
+        mediaItems: mediaUrls.map((url) => ({
+          type: (url.match(/\.(mp4|mov|webm)$/i) ? 'video' : 'image') as 'image' | 'video',
+          url,
+        })),
+        scheduledFor: body.scheduledFor,
+        timezone,
+        publishNow: !body.scheduledFor,
+      });
+
+      return NextResponse.json({
+        success: true,
+        postId: result.postId,
+        localPostId: result.postId,
+        missing: result.platformResults.filter((r) => r.status === 'failed').map((r) => r.platform),
+        platforms: result.platformResults.map((r) => r.platform),
+      });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     if (body.contentType && !CONTENT_TYPE_CONFIGS[body.contentType]) {
       return NextResponse.json({ error: `Unsupported content type: ${body.contentType}` }, { status: 400 });
     }
 
     const admin = getAdmin();
-
-    // Load the user's Zernio profile.
     const { data: userRow } = await admin
       .from('users')
       .select('zernio_profile_id')
@@ -55,13 +85,9 @@ export async function POST(req: NextRequest) {
 
     const profileId = userRow?.zernio_profile_id || null;
     if (!profileId) {
-      return NextResponse.json(
-        { error: 'No Zernio profile. Connect a social account first.' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'No Zernio profile. Connect a social account first.' }, { status: 400 });
     }
 
-    // Map platform → connected Zernio accountId.
     const { data: accounts } = await admin
       .from('social_accounts')
       .select('platform, zernio_account_id')
@@ -105,7 +131,6 @@ export async function POST(req: NextRequest) {
       publishNow,
     });
 
-    // Persist local record.
     const now = new Date();
     const scheduledAt = body.scheduledFor ? new Date(body.scheduledFor) : null;
     const status = publishNow ? 'published' : scheduledAt && scheduledAt > now ? 'scheduled' : 'draft';
@@ -173,13 +198,32 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// GET → list the user's scheduled + past posts straight from Zernio.
+// GET → list the user's scheduled + past posts.
 export async function GET(req: NextRequest) {
   try {
     const user = await requireUser();
     const admin = getAdmin();
     const status = req.nextUrl.searchParams.get('status') || undefined;
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const posts = await provider.listPosts({ userId: user.id, status: status as any, limit: 50 });
+      return NextResponse.json({ posts: posts.map((p) => ({
+        id: p.id,
+        content: p.content,
+        status: p.status,
+        scheduledFor: p.scheduledFor || null,
+        timezone: 'UTC',
+        createdAt: p.createdAt,
+        publishedAt: p.publishedAt || null,
+        title: '',
+        platforms: p.platforms.map((pt) => ({ platform: pt.platform, status: pt.status })),
+        media: (p.mediaItems || []).map((m) => ({ type: m.type, url: m.url })),
+      })) });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     const { data: userRow } = await admin
       .from('users')
       .select('zernio_profile_id')
@@ -214,7 +258,7 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// DELETE → cancel a scheduled post (and mark it locally).
+// DELETE → cancel a scheduled post.
 export async function DELETE(req: NextRequest) {
   try {
     const user = await requireUser();
@@ -223,6 +267,14 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: 'Missing post id' }, { status: 400 });
     }
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      await provider.cancelPost(postId);
+      return NextResponse.json({ success: true });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     await ZernioService.cancelPost(postId);
 
     const admin = getAdmin();

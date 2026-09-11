@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,6 +20,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'File exceeds 100MB limit.' }, { status: 400 });
     }
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const result = await provider.presignUpload({
+        userId: user.id,
+        filename: file.name,
+        contentType: file.type,
+      });
+
+      // Upload file to the presigned URL
+      const uploadRes = await fetch(result.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error('Failed to upload file');
+      }
+
+      return NextResponse.json({
+        url: result.publicUrl,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+      });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
     const path = `${user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${ext}`;
 

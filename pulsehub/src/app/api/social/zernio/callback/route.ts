@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
 import { upsertZernioAccounts } from '@/services/social/accountSync.service';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,12 +31,35 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(`${base}/connections?error=${encodeURIComponent(error)}`, origin));
     }
 
-    const platform = params.get('platform');
+    const code = params.get('code');
+    const state = params.get('state');
+    const platform = params.get('platform') as any;
+
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted' && code && state) {
+      const provider = getSocialProvider();
+      const result = await provider.handleCallback({ platform: platform || 'instagram', code, state });
+
+      if (!result.success) {
+        return NextResponse.redirect(new URL(`${base}/connections?error=${encodeURIComponent(result.error || 'Connection failed')}`, origin));
+      }
+
+      if (result.needsSelection && result.selectionOptions?.length) {
+        const sel = new URLSearchParams({
+          platform: result.platform || platform || '',
+          state,
+          options: JSON.stringify(result.selectionOptions),
+        });
+        return NextResponse.redirect(new URL(`${base}/connections/select?${sel.toString()}`, origin));
+      }
+
+      return NextResponse.redirect(new URL(`${base}/connections?connected=1&platform=${result.platform || platform || ''}`, origin));
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     const step = params.get('step');
     const pendingDataToken = params.get('pendingDataToken');
 
-    // Selection-required platform (facebook/linkedin/pinterest/instagram-fb-login)
-    // → our own branded picker to keep Zernio invisible.
     if (step || pendingDataToken) {
       const sel = new URLSearchParams();
       if (platform) sel.set('platform', platform);
@@ -47,7 +71,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL(`${base}/connections/select?${sel.toString()}`, origin));
     }
 
-    // Account already connected by Zernio → persist and return to Accounts.
     const accountId = params.get('accountId') || params.get('account_id');
     let profileId = params.get('profileId') || undefined;
     if (!profileId) profileId = userRow?.zernio_profile_id || undefined;

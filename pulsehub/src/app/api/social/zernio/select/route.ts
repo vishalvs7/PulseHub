@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
 import { upsertZernioAccounts } from '@/services/social/accountSync.service';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -16,6 +17,15 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Missing platform' }, { status: 400 });
     }
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      // Options are passed from callback via URL params on the frontend
+      const optionsParam = params.get('options');
+      const options = optionsParam ? JSON.parse(optionsParam) : [];
+      return NextResponse.json({ options, platform });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     const result = await ZernioService.listSelectionOptions(platform, {
       profileId: params.get('profileId') || undefined,
       tempToken: params.get('tempToken') || undefined,
@@ -40,6 +50,20 @@ export async function POST(req: NextRequest) {
     const platform = body.platform as string;
     const profileId = body.profileId as string;
     const tempToken = body.tempToken as string;
+
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const result = await provider.completeSelection({
+        platform: platform as any,
+        userId: user.id,
+        selectionId: body.selection?.id || body.selectionId || '',
+        state: tempToken,
+      });
+      return NextResponse.json({ success: result.success, account: { accountId: result.accountId, platform, username: result.username } });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     if (!platform || !profileId || !tempToken) {
       return NextResponse.json({ error: 'Missing platform, profileId or tempToken' }, { status: 400 });
     }

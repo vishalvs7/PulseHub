@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
 import { CROSSPOST_PLATFORMS } from '@/lib/socialPlatforms';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 import type { CrossPostPlatform } from '@/lib/socialPlatforms';
 
 export const runtime = 'nodejs';
@@ -17,13 +18,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 });
     }
 
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const result = await provider.getConnectUrl({ platform, userId: user.id });
+      return NextResponse.json({ authUrl: result.authUrl, profileId: '' });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     if (!ZernioService.isConfigured()) {
       return NextResponse.json({ error: 'ZERNIO_API_KEY is not configured on the server.' }, { status: 500 });
     }
 
     const admin = getAdmin();
-
-    // Fetch the user's Zernio profile id (create one if missing).
     const { data: userRow } = await admin
       .from('users')
       .select('zernio_profile_id')
@@ -35,16 +42,9 @@ export async function POST(req: NextRequest) {
     if (!profileId) {
       const { profileId: created } = await ZernioService.createProfile(`PulseHub ${user.email}`);
       profileId = created;
-      await admin
-        .from('users')
-        .update({ zernio_profile_id: profileId })
-        .eq('id', user.id);
+      await admin.from('users').update({ zernio_profile_id: profileId }).eq('id', user.id);
     }
 
-    // White-label OAuth: headless mode + our own redirect so the user never
-    // sees Zernio's dashboard or selection UI. Selection-required platforms
-    // (facebook/linkedin/pinterest/instagram-fb-login) bounce through our
-    // branded picker via /api/social/zernio/callback.
     const { authUrl } = await ZernioService.getConnectUrl(platform, profileId, {
       headless: true,
       redirectUrl: `${ZernioService.getBaseUrl()}/api/social/zernio/callback`,

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireUser, getAdmin } from '@/lib/auth/server-auth';
 import { ZernioService } from '@/services/social/zernio.service';
+import { getSocialProvider, getActiveProviderName } from '@/services/social/contracts';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -8,12 +9,19 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
+    if (getActiveProviderName() === 'selfhosted') {
+      const provider = getSocialProvider();
+      const accounts = await provider.listAccounts(user.id);
+      return NextResponse.json({ accounts });
+    }
+
+    // ── ZERNIO PATH (default) ─────────────────────────────────────────────
     const body = await req.json().catch(() => ({}));
     const profileId = (body.profileId as string) || undefined;
 
     const admin = getAdmin();
-
-    // Resolve the user's Zernio profile if not passed explicitly.
     let zernioProfileId = profileId;
     if (!zernioProfileId) {
       const { data: userRow } = await admin
@@ -37,7 +45,6 @@ export async function POST(req: NextRequest) {
       const platform = acct.platform.toLowerCase();
       const username = (acct.username as string) || platform;
 
-      // Upsert keyed on zernio_account_id.
       const { data: existing } = await admin
         .from('social_accounts')
         .select('id')
@@ -48,13 +55,7 @@ export async function POST(req: NextRequest) {
       if (existing) {
         const { data } = await admin
           .from('social_accounts')
-          .update({
-            platform,
-            username,
-            zernio_profile_id: zernioProfileId,
-            is_connected: true,
-            last_synced: now,
-          })
+          .update({ platform, username, zernio_profile_id: zernioProfileId, is_connected: true, last_synced: now })
           .eq('id', existing.id)
           .select()
           .single();
@@ -63,14 +64,9 @@ export async function POST(req: NextRequest) {
         const { data } = await admin
           .from('social_accounts')
           .insert({
-            user_id: user.id,
-            platform,
-            username,
-            zernio_profile_id: zernioProfileId,
-            zernio_account_id: acct._id,
-            access_token: '',
-            is_connected: true,
-            last_synced: now,
+            user_id: user.id, platform, username,
+            zernio_profile_id: zernioProfileId, zernio_account_id: acct._id,
+            access_token: '', is_connected: true, last_synced: now,
           })
           .select()
           .single();
