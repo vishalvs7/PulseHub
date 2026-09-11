@@ -19,6 +19,7 @@ import type {
   ReplyCommentRequest,
   GetAnalyticsRequest,
   AnalyticsResult,
+  PostAnalytics,
   UploadRequest,
   UploadResult,
   CrossPostPlatform,
@@ -452,49 +453,142 @@ export class SelfHostedProvider implements SocialProvider {
       .eq('is_connected', true);
 
     const platforms: AnalyticsResult['platforms'] = [];
+    const allPosts: AnalyticsResult['posts'] = [];
 
     for (const account of accounts || []) {
       if (request.platform && account.platform !== request.platform) continue;
 
       const adapter = getAdapter(account.platform as CrossPostPlatform);
-      if (!adapter?.getFollowerStats) continue;
+      if (!adapter) continue;
 
-      try {
-        const stats = await adapter.getFollowerStats(account.profile_id, account.access_token);
-        platforms.push({
-          platform: account.platform as CrossPostPlatform,
-          accountId: account.profile_id,
-          username: account.username,
-          followers: stats.followers,
-          impressions: 0,
-          reach: 0,
-          engagement: 0,
-          engagementRate: 0,
-        });
-      } catch {
-        // Skip failed platforms
+      const platformImpressions = { impressions: 0, reach: 0, engagement: 0 };
+
+      // 1. Get follower stats
+      if (adapter.getFollowerStats) {
+        try {
+          const stats = await adapter.getFollowerStats(account.profile_id, account.access_token);
+          platforms.push({
+            platform: account.platform as CrossPostPlatform,
+            accountId: account.profile_id,
+            username: account.username,
+            followers: stats.followers,
+            impressions: 0,
+            reach: 0,
+            engagement: 0,
+            engagementRate: 0,
+          });
+        } catch {
+          platforms.push({
+            platform: account.platform as CrossPostPlatform,
+            accountId: account.profile_id,
+            username: account.username,
+            followers: 0,
+            impressions: 0,
+            reach: 0,
+            engagement: 0,
+            engagementRate: 0,
+          });
+        }
+      }
+
+      // 2. Fetch recent posts and their insights
+      if (adapter.getRecentPosts || adapter.getPostInsights) {
+        try {
+          let recentPosts: Array<{ id: string; text: string; timestamp: string; mediaType: string }> = [];
+
+          // Fetch recent posts from the platform
+          if (account.platform === 'instagram' || account.platform === 'facebook' || account.platform === 'threads') {
+            const metaAdapter = getMetaAdapter();
+            if (account.platform === 'threads') {
+              const threads = await metaAdapter.getRecentThreads(account.profile_id, account.access_token, 25);
+              recentPosts = threads.map(t => ({ id: t.id, text: t.text, timestamp: t.timestamp, mediaType: t.mediaType }));
+            } else {
+              const media = await metaAdapter.getRecentMedia(account.profile_id, account.access_token, 25);
+              recentPosts = media.map(m => ({ id: m.id, text: m.caption, timestamp: m.timestamp, mediaType: m.mediaType }));
+            }
+          } else if (account.platform === 'linkedin' && adapter.getRecentPosts) {
+            recentPosts = await adapter.getRecentPosts(account.profile_id, account.access_token, 25);
+          }
+
+          // Get insights for each post
+          for (const post of recentPosts) {
+            try {
+              if (!adapter.getPostInsights) continue;
+
+              let insights: Partial<PostAnalytics>;
+
+              if (account.platform === 'threads') {
+                const metaAdapter = getMetaAdapter();
+                insights = await metaAdapter.getThreadsInsights(account.profile_id, account.access_token, post.id);
+              } else {
+                insights = await adapter.getPostInsights(account.profile_id, account.access_token, post.id);
+              }
+
+              platformImpressions.impressions += insights.impressions || 0;
+              platformImpressions.reach += insights.reach || 0;
+              platformImpressions.engagement += (insights.likes || 0) + (insights.comments || 0) + (insights.shares || 0);
+
+              allPosts.push({
+                postId: post.id,
+                platform: account.platform as CrossPostPlatform,
+                content: post.text,
+                impressions: insights.impressions || 0,
+                reach: insights.reach || 0,
+                likes: insights.likes || 0,
+                comments: insights.comments || 0,
+                shares: insights.shares || 0,
+                saves: insights.saves || 0,
+                views: insights.views || 0,
+                clicks: insights.clicks || 0,
+                publishedAt: post.timestamp,
+              });
+            } catch {
+              // Skip individual post failures
+            }
+          }
+        } catch {
+          // Skip platform-level failures
+        }
+      }
+
+      // 3. Update platform totals
+      const platformEntry = platforms.find(p => p.accountId === account.profile_id);
+      if (platformEntry) {
+        platformEntry.impressions = platformImpressions.impressions;
+        platformEntry.reach = platformImpressions.reach;
+        platformEntry.engagement = platformImpressions.engagement;
+        platformEntry.engagementRate = platformEntry.followers > 0
+          ? Math.round((platformImpressions.engagement / platformEntry.followers) * 10000) / 100
+          : 0;
       }
     }
 
-    // Get analytics snapshots from local DB
+    // 4. Build follower trend from snapshots
+    const dateFrom = request.dateFrom || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const dateTo = request.dateTo || new Date().toISOString();
+
     const { data: snapshots } = await getSupabase()
       .from('analytics_snapshots')
       .select('*')
       .eq('user_id', request.userId)
-      .order('snapshot_date', { ascending: false })
-      .limit(100);
+      .gte('snapshot_date', dateFrom)
+      .lte('snapshot_date', dateTo)
+      .order('snapshot_date', { ascending: true });
 
-    const posts: AnalyticsResult['posts'] = [];
-    const followerTrend: AnalyticsResult['followerTrend'] = [];
+    const followerTrend: AnalyticsResult['followerTrend'] = (snapshots || []).map((snap: any) => ({
+      date: snap.snapshot_date,
+      platform: snap.platform as CrossPostPlatform,
+      followers: snap.followers || 0,
+    }));
+
+    // Sort posts by publishedAt descending (most recent first)
+    allPosts.sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
 
     return {
       hasAccess: platforms.length > 0,
-      dateRange: {
-        from: request.dateFrom || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-        to: request.dateTo || new Date().toISOString(),
-      },
+      dateRange: { from: dateFrom, to: dateTo },
       platforms,
-      posts,
+      posts: allPosts.slice(0, 50),
       followerTrend,
       lastSync: new Date().toISOString(),
     };

@@ -485,6 +485,41 @@ export class MetaAdapter implements PlatformAdapter {
     }
   }
 
+  // ─── Recent Posts ───────────────────────────────────────────────────────
+
+  async getRecentMedia(igUserId: string, accessToken: string, limit = 50): Promise<Array<{ id: string; caption: string; mediaType: string; timestamp: string; permalink: string; likeCount: number; commentsCount: number }>> {
+    const res = await fetch(
+      `${GRAPH_BASE}/${igUserId}/media?fields=id,caption,media_type,timestamp,permalink,like_count,comments_count&limit=${limit}&access_token=${accessToken}`
+    );
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+
+    return (data.data || []).map((item: any) => ({
+      id: item.id,
+      caption: item.caption || '',
+      mediaType: item.media_type || 'IMAGE',
+      timestamp: item.timestamp || '',
+      permalink: item.permalink || '',
+      likeCount: item.like_count || 0,
+      commentsCount: item.comments_count || 0,
+    }));
+  }
+
+  async getRecentThreads(threadsUserId: string, accessToken: string, limit = 50): Promise<Array<{ id: string; text: string; timestamp: string; mediaType: string }>> {
+    const res = await fetch(
+      `${THREADS_BASE}/${threadsUserId}/threads?fields=id,text,timestamp,media_type&limit=${limit}&access_token=${accessToken}`
+    );
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+
+    return (data.data || []).map((item: any) => ({
+      id: item.id,
+      text: item.text || '',
+      timestamp: item.timestamp || '',
+      mediaType: item.media_type || 'TEXT',
+    }));
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────────────────
 
   async getPages(accessToken: string): Promise<Array<{ id: string; name: string; accessToken: string; igUserId?: string; igUsername?: string }>> {

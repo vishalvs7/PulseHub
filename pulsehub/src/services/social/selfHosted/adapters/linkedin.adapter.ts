@@ -254,6 +254,29 @@ export class LinkedInAdapter implements PlatformAdapter {
     };
   }
 
+  // ─── Recent Posts ───────────────────────────────────────────────────────
+
+  async getRecentPosts(accountId: string, accessToken: string, limit = 50): Promise<Array<{ id: string; text: string; timestamp: string; mediaType: string }>> {
+    const res = await fetch(
+      `${LINKEDIN_API_BASE}/ugcPosts?q=authors&authors=List(urn:li:organization:${accountId})&count=${limit}&projection=(elements*(id,created,lastModified,specificContent))`,
+      {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      }
+    );
+    const data = await res.json();
+    if (data.error) throw new Error(data.message || JSON.stringify(data));
+
+    return (data.elements || []).map((item: any) => {
+      const content = item.specificContent?.['com.linkedin.ugc.ShareContent']?.shareCommentary?.text || '';
+      return {
+        id: item.id || '',
+        text: content,
+        timestamp: item.created?.time ? new Date(item.created.time).toISOString() : '',
+        mediaType: item.specificContent?.['com.linkedin.ugc.ShareContent']?.shareMediaCategory || 'NONE',
+      };
+    });
+  }
+
   // ─── Token Validation ────────────────────────────────────────────────────
 
   async validateToken(accessToken: string): Promise<boolean> {

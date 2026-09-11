@@ -291,6 +291,7 @@ export interface PlatformAdapter {
   // Analytics
   getPostInsights?(accountId: string, accessToken: string, postId: string): Promise<Partial<PostAnalytics>>;
   getFollowerStats?(accountId: string, accessToken: string): Promise<{ followers: number; engagement?: number }>;
+  getRecentPosts?(accountId: string, accessToken: string, limit?: number): Promise<Array<{ id: string; text: string; timestamp: string; mediaType: string }>>;
 
   // Validation
   validateToken(accessToken: string): Promise<boolean>;
