@@ -44,16 +44,18 @@ export async function GET(req: NextRequest) {
         return NextResponse.redirect(new URL(`${base}/connections?error=${encodeURIComponent(result.error || 'Connection failed')}`, origin));
       }
 
+      const detectedPlatform = result.platform || platform || '';
+
       if (result.needsSelection && result.selectionOptions?.length) {
         const sel = new URLSearchParams({
-          platform: result.platform || platform || '',
+          platform: detectedPlatform,
           state,
           options: JSON.stringify(result.selectionOptions),
         });
         return NextResponse.redirect(new URL(`${base}/connections/select?${sel.toString()}`, origin));
       }
 
-      return NextResponse.redirect(new URL(`${base}/connections?connected=1&platform=${result.platform || platform || ''}`, origin));
+      return NextResponse.redirect(new URL(`${base}/connections?connected=1&platform=${detectedPlatform}`, origin));
     }
 
     // ── ZERNIO PATH (default) ─────────────────────────────────────────────

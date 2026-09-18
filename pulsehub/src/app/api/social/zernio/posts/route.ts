@@ -44,12 +44,28 @@ export async function POST(req: NextRequest) {
     // ── SELF-HOSTED PATH ──────────────────────────────────────────────────
     if (getActiveProviderName() === 'selfhosted') {
       const provider = getSocialProvider();
+      const admin = getAdmin();
+
+      // Look up the actual platform account IDs (profile_id) for each target platform
+      const platformAccountIds: Record<string, string> = {};
+      const { data: socialAccounts } = await admin
+        .from('social_accounts')
+        .select('platform, profile_id')
+        .eq('user_id', user.id)
+        .eq('is_connected', true);
+
+      for (const acct of socialAccounts || []) {
+        if (acct.profile_id && !platformAccountIds[acct.platform]) {
+          platformAccountIds[acct.platform] = acct.profile_id;
+        }
+      }
+
       const result = await provider.createPost({
         userId: user.id,
         content,
         platforms: targets.map((t) => ({
           platform: t.platform,
-          accountId: user.id,
+          accountId: platformAccountIds[t.platform] || user.id,
           customContent: t.customContent,
           destination: t.destination,
         })),

@@ -62,12 +62,12 @@ export class SelfHostedProvider implements SocialProvider {
   }
 
   async handleCallback(request: CallbackRequest): Promise<CallbackResult> {
-    // Validate state
+    // Validate state — platform may not be in query params (Meta/LinkedIn don't send it),
+    // so we read it from the state record instead.
     const { data: stateRecord } = await getSupabase()
       .from('oauth_states')
       .select('*')
       .eq('state_token', request.state)
-      .eq('platform', request.platform)
       .gt('expires_at', new Date().toISOString())
       .single();
 
@@ -76,15 +76,17 @@ export class SelfHostedProvider implements SocialProvider {
     }
 
     const userId = stateRecord.user_id;
+    // Use the platform stored in the state record — not the query param (which may be missing/defaulted)
+    const platform = stateRecord.platform as CrossPostPlatform;
     const redirectUri = `${BASE_URL}/api/social/callback`;
 
     try {
-      if (request.platform === 'instagram' || request.platform === 'facebook' || request.platform === 'threads') {
-        return await this.handleMetaCallback(request.code, redirectUri, userId, request.platform);
-      } else if (request.platform === 'linkedin') {
+      if (platform === 'instagram' || platform === 'facebook' || platform === 'threads') {
+        return await this.handleMetaCallback(request.code, redirectUri, userId, platform);
+      } else if (platform === 'linkedin') {
         return await this.handleLinkedInCallback(request.code, redirectUri, userId);
       } else {
-        return { success: false, error: `Platform ${request.platform} not implemented` };
+        return { success: false, error: `Platform ${platform} not implemented` };
       }
     } finally {
       // Clean up state
@@ -122,7 +124,8 @@ export class SelfHostedProvider implements SocialProvider {
 
     if (platform === 'instagram') {
       if (igAccounts.length > 1) {
-        // Multiple IG accounts — need selection
+        // Store temp account with user-level token so completeSelection can find it
+        await this.storeAccount(userId, 'instagram', 'temp', 'pending', tokenBundle.accessToken);
         return {
           success: true,
           needsSelection: true,
@@ -146,6 +149,8 @@ export class SelfHostedProvider implements SocialProvider {
 
     if (platform === 'facebook') {
       if (fbPages.length > 1) {
+        // Store temp account with user-level token so completeSelection can find it
+        await this.storeAccount(userId, 'facebook', 'temp', 'pending', tokenBundle.accessToken);
         return {
           success: true,
           needsSelection: true,
@@ -179,6 +184,8 @@ export class SelfHostedProvider implements SocialProvider {
     const orgs = await linkedinAdapter.getOrganizations(tokenBundle.accessToken);
 
     if (orgs.length > 1) {
+      // Store temp account with user-level token so completeSelection can find it
+      await this.storeAccount(userId, 'linkedin', 'temp', 'pending', tokenBundle.accessToken);
       return {
         success: true,
         needsSelection: true,
@@ -207,12 +214,13 @@ export class SelfHostedProvider implements SocialProvider {
   }
 
   async completeSelection(request: SelectionRequest): Promise<SelectionResult> {
-    // Retrieve stored tokens from the most recent social_account for this user + platform
+    // Retrieve stored token from the temp account (profile_id = 'pending')
     const { data: existing } = await getSupabase()
       .from('social_accounts')
       .select('access_token')
       .eq('user_id', request.userId)
       .eq('platform', request.platform)
+      .eq('profile_id', 'pending')
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -221,24 +229,22 @@ export class SelfHostedProvider implements SocialProvider {
       return { success: false, error: 'No stored token found' };
     }
 
-    // Get the selection details
-    const option = request.selectionId; // This is the selected org/page ID
+    const accessToken = existing.access_token;
 
-    // Look up the name from selection options if available, otherwise use the ID
-    const { data: existingAccount } = await getSupabase()
+    // Clean up temp accounts before storing the real one
+    await getSupabase()
       .from('social_accounts')
-      .select('username')
+      .delete()
       .eq('user_id', request.userId)
       .eq('platform', request.platform)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .eq('profile_id', 'pending');
 
-    const username = existingAccount?.username || option;
+    // The selected org/page ID
+    const selectionId = request.selectionId;
 
-    // Store the account with the selected org/page ID as profile_id
-    await this.storeAccount(request.userId, request.platform, username, option, existing.access_token);
-    return { success: true, accountId: option, username };
+    // Store the account with the real selected org/page ID as profile_id
+    await this.storeAccount(request.userId, request.platform, selectionId, selectionId, accessToken);
+    return { success: true, accountId: selectionId, username: selectionId };
   }
 
   async listAccounts(userId: string): Promise<SocialAccount[]> {
