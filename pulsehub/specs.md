@@ -189,27 +189,37 @@ Instead of building direct platform integrations, use n8n (self-hosted, free) as
 - [x] Harden auth service
 - [x] Create admin client + auth callback
 
-### Phase 3 ⬜ — Core Services & Real Data
-- [ ] Build `brand.service.ts` — CRUD for brand profiles, campaign management with real DB queries
-- [ ] Build `influencer.service.ts` — profile management, trust score, marketplace listing
-- [ ] Build `marketplace.service.ts` — search, filter, discover influencers
-- [ ] Build `analytics.service.ts` — fetch from DB/APIs, aggregate
+### Phase 3 ✅ — Core Services & Real Data
+- [x] Build `brand.service.ts` — CRUD for brand profiles, campaign management with real DB queries
+- [x] Build `influencer.service.ts` — profile management, trust score, marketplace listing
+- [x] Build `marketplace.service.ts` — search, filter, discover influencers
+- [x] Build `analytics.service.ts` — fetch from DB/APIs, aggregate
 
-### Phase 4 ⬜ — Replace Placeholder Data
-- [ ] Wire brand dashboard to real data
-- [ ] Wire influencer dashboard to real data
-- [ ] Wire campaigns page to real data
-- [ ] Wire marketplace to real data
-- [ ] Wire analytics pages to real data
+### Phase 4 ✅ — Replace Placeholder Data
+- [x] Wire brand dashboard to real data
+- [x] Wire influencer dashboard to real data
+- [x] Wire campaigns page to real data
+- [x] Wire marketplace to real data
+- [x] Wire analytics pages to real data
 
 ### Phase 5 ⬜ — Social Platform Integration
-- [ ] Design OAuth connection flow (each platform)
-- [ ] Build `instagram.service.ts`
-- [ ] Build `twitter.service.ts`
-- [ ] Build `linkedin.service.ts`
-- [ ] Build post composer UI (cross-platform)
-- [ ] Build unified inbox (comments only)
-- [ ] Build scheduled posting system
+- [x] Design OAuth connection flow (each platform)
+- [x] Build Meta adapter (Instagram + Facebook + Threads)
+- [x] Build LinkedIn adapter
+- [x] Build post composer UI (cross-platform)
+- [x] Build unified inbox (comments only)
+- [x] Build scheduled posting system
+- [x] Fix platform detection in OAuth callback (BUG #1)
+- [x] Fix callback redirect to correct dashboard (BUG #2)
+- [x] Fix post accountId lookup (BUG #3)
+- [x] Fix multi-account selection flow (BUG #4)
+- [x] Custom domain deployed (postpilot.growphile.com)
+- [ ] **Live OAuth test** — connect Instagram → verify pages → post → verify lands on platform
+- [ ] **Live Facebook connect test** — verify page selection, posting, comments
+- [ ] **Live LinkedIn connect test** — verify org selection, posting, analytics
+- [ ] **Live Threads connect test** — verify posting, inbox sync
+- [ ] **OAuth redirect URI setup** — add `https://postpilot.growphile.com/api/social/callback` in Meta + LinkedIn dashboards
+- [ ] Token vault + encryption + refresh (security hardening)
 
 ### Phase 6 ⬜ — Chat, Admin & Polish
 - [ ] Build real-time in-app chat
@@ -385,7 +395,20 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 
 ## What Was Done Recently
 
-### 0. Posting UX + AI Studio + Accounts (Latest)
+### 0. Self-Hosted OAuth Fixes + Production Deploy (Latest)
+- **4 critical bugs fixed** in the self-hosted social integration layer:
+  - **BUG #1** (`selfHosted.provider.ts`): Platform detection — removed `.eq('platform', ...)` from state query; platform now read from `stateRecord.platform`, fixing Facebook/Threads/LinkedIn OAuth detection.
+  - **BUG #2** (`callback/route.ts`): OAuth callback redirect — rewrote to look up user role from `social_accounts` + `users` tables; redirects to `/brand/{uid}/connections` or `/influencer/{uid}/connections` (was redirecting to non-existent `/connections`).
+  - **BUG #3** (`zernio/posts/route.ts`): Post accountId — looks up `profile_id` from `social_accounts` by `user_id + platform` before passing to provider (was passing `user.id` which is a UUID, not a platform account ID).
+  - **BUG #4** (`selfHosted.provider.ts`): Multi-account selection flow — all 3 selection branches (Instagram multi, Facebook multi, LinkedIn multi) now store a temp account with `profile_id: 'pending'` before returning `needsSelection: true`; `completeSelection` reads token from temp account, deletes it, then stores the real account.
+- **Detailed audit passed** for all single-account flows (Instagram, Facebook, Threads, LinkedIn) and multi-account selection flows.
+- **Custom domain deployed:** `https://postpilot.growphile.com` — DNS verified, Vercel alias configured, production live.
+- **`NEXT_PUBLIC_APP_URL`** set to `https://postpilot.growphile.com` in both `.env.local` and Vercel production env vars.
+- **`database.md`** created — full schema reference (15 tables, 6 functions, 7 triggers, 20 indexes, RLS policies, seed data, migration history, design decisions, pitfalls).
+- **Supabase project resumed** — was paused (free tier), now live at `elsowkdruovxrotbxsmi`.
+- **Deployed via Vercel CLI** — pushed to GitHub `main`, then `vercel --prod` to deploy. GitHub auto-deploy is not configured (project was deployed via CLI, not linked to GitHub in Vercel dashboard).
+
+### 1. Posting UX + AI Studio + Accounts
 - **AI captions inside the composer** (`PostComposer.tsx` Step 2): one prompt → streamed, platform-tailored captions for Instagram / X / LinkedIn / TikTok, each rendered in its own **editable** box with live char counters; per-platform captions are sent to Zernio as `customContent` (API already supported it) and reflected in previews. Removed the standalone "Caption Tuner" tab from AI Studio (component deleted).
 - **`ClipStudio.tsx` — combined Resize & Trim** (replaces the old VideoResizer tab): aspect presets (9:16, 1:1, 4:5, 16:9), trim start/end pins with playhead scrub, and **3 fill modes** that fix the landscape→portrait zoom-out problem: **center-crop with a draggable crop window**, **blurred fit** (nothing cut, blurred sides), and **letterbox**. Optional **audio-preserving** real-time render path.
 - **Accounts page supports multiple profiles per platform** (`ZernioConnections.tsx` redesign): empty state "No profiles connected" + Add New Account; modal with platform-type grid + username/label; pending-auth card → Sync to finish; one card per connected profile; horizontal "Platforms supported" strip at the bottom. `social_accounts` already allowed multiple rows per platform — no migration needed.
@@ -440,27 +463,34 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - ✅ **Comment-to-DM** automation with link **and document (PDF/DOCX) sharing**
 - ✅ Auth deadlock fix (pages load on full reload); users-readable RLS policy (no more 406s on deals)
 - ✅ `npm run build` passes
+- ✅ **Self-hosted OAuth integration** — Meta (IG/FB/Threads) + LinkedIn adapters built, platform detection fixed, multi-account selection flow fixed
+- ✅ **Custom domain** — `postpilot.growphile.com` live, DNS verified, Vercel alias configured
+- ✅ **Supabase live** — project resumed, database.md documented (15 tables, 6 functions, 7 triggers, 20 indexes)
 
 ## What's Not Working / Not Built
 
-- ❌ **Platform OAuth connect** (IG/Twitter/LinkedIn/Reddit) — service + routes scaffolded, but no app credentials / app review yet; posting currently routes through Zernio aggregator
-- ❌ **Zernio scheduling polish** — cross-posting works via Zernio; scheduled posting and per-destination (Shorts/Reel) behavior depend on Zernio capabilities
+- ❌ **Live OAuth test not yet run** — all 4 platform connect flows fixed in code but not verified end-to-end with real Meta/LinkedIn accounts
+- ❌ **OAuth redirect URIs not yet added** — user must add `https://postpilot.growphile.com/api/social/callback` in Meta and LinkedIn developer dashboards
+- ❌ **Token vault / encryption / refresh** — tokens stored in plaintext in `social_accounts` table; needs encryption at rest + auto-refresh logic
+- ❌ **YouTube, Reddit, Pinterest, X/Twitter, TikTok** — not yet integrated (show "Coming Soon" in UI)
 - ❌ **Real-time deal-based chat** + anti-leakage sanitization — inbox is placeholder UI
 - ❌ **Unified analytics pipeline** (cron 6–12h) + unified `views` metric — snapshots exist, no worker
 - ❌ **Admin panel** — no admin dashboard page
-- 🟡 "Best Time to Post" + Comment-to-DM — demo/draft only (need analytics worker / DM-capable platform APIs)
-- 🟡 Marketplace search — ilike/contains + reach-tier facet (no FTS/Meilisearch)
+- 🟡 **Zernio scheduling polish** — cross-posting works via Zernio; scheduled posting and per-destination behavior depend on Zernio capabilities
+- 🟡 **Best Time to Post** + Comment-to-DM — demo/draft only (need analytics worker / DM-capable platform APIs)
+- 🟡 **Marketplace search** — ilike/contains + reach-tier facet (no FTS/Meilisearch)
 
 ## Deployment (Vercel — Live)
 
-- **URL:** `https://prepost-app.vercel.app` (production). Note: `prepost.vercel.app` and `pulsehub.vercel.app` are both taken by other Vercel accounts/teams.
-- **Project:** `pulsehub` under team `amp-global`; `vercel.json` (Next.js framework, `npm run build`).
-- **Git integration:** connected to `github.com/vishalvs7/PulseHub`; production branch `main` — pushes to `main` auto-deploy to production. `rootDirectory` set to `pulsehub` (app lives in the `pulsehub/` subdir of the repo).
-- **Env vars pushed to Vercel (production):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_PROJECT_NUMBER`, `ZERNIO_API_KEY`. `VERCEL_TOKEN` is stored in local `.env.local` only (gitignored).
+- **Production URL:** `https://postpilot.growphile.com` (custom domain, verified)
+- **Vercel URL:** `https://pulsehub-2n69uilfc-growphiles-projects.vercel.app`
+- **Project:** `pulsehub` (ID: `prj_TBwpnzgSaacm8O4NxTR6eAXOm9KU`), org: **Growphile's projects** (`team_YLcxrfKNcWs3ermw5tsd1AUC`)
+- **Git integration:** connected to `github.com/vishalvs7/PulseHub`; production branch `main`. However, auto-deploy is **not linked** in Vercel dashboard — deployments use CLI `vercel --prod`.
+- **Env vars on Vercel (production):** `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `GEMINI_API_KEY`, `GEMINI_PROJECT_NUMBER`, `ZERNIO_API_KEY`, `NEXT_PUBLIC_APP_URL=https://postpilot.growphile.com`. `VERCEL_TOKEN` is local `.env.local` only (gitignored).
 - **Verified live:** homepage, register, login, pricing, tools all 200; register API creates auto-confirmed users; login → role dashboard redirect works; middleware protects `/influencer|brand|admin/[uid]` (307 → `/login?redirect=...`).
 - **Known deployment warning:** Next.js reports `middleware` file convention deprecated → use `proxy` instead (Next 16). Non-blocking; build succeeds.
 
-## Recent Session (Cross-Posting Wizard + Posting UX)
+## Recent Session (Self-Hosted OAuth Fixes + Production Deploy)
 
 - **4-step wizard composer** replacing the single-form composer: content type → accounts & text → preview → schedule. Content types (square image/video, vertical short video, long video, document) drive platform eligibility and per-platform destination (IG Reel, YouTube Shorts, TikTok Video, etc.).
 - **New files:** `src/lib/postFormats.ts` (content-type config + eligibility + destination map), `src/components/posting/AspectShape.tsx` (dotted-line dimension shapes), `src/components/posting/BrandIcon.tsx` (react-icons brand logos), `src/components/posting/PlatformPreviews.tsx` (per-platform mock frames).
@@ -469,7 +499,23 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - **UI polish:** step-1 cards show dotted aspect shapes + real brand logos (react-icons, incl. TikTok/Threads/Pinterest/Reddit not in lucide); brand logos reused across step-2 platform picker, char counters, preview headers; sidebar "Connections" tab renamed to **"Accounts"**.
 - **Verified headless:** per-type platform filtering (document → LinkedIn/X/FB/Reddit; long video → no TikTok; vertical → IG/TikTok/YouTube/FB), destination badges, preview frames, schedule step; `npm run build` green; production responding 200 after auto-deploy.
 
-## Next Steps — Self-Hosted Unified Social API (Primary Track)
+## Next Steps — Self-Hosted Unified Social API
+
+### What's Done (as of Latest Session)
+- ✅ All 4 platform adapters built (Meta IG/FB/Threads + LinkedIn)
+- ✅ All 4 critical OAuth bugs fixed (platform detection, callback redirect, post accountId, multi-account selection)
+- ✅ Custom domain `postpilot.growphile.com` deployed and verified
+- ✅ Supabase project resumed and live
+- ✅ `database.md` created with full schema reference
+
+### What's Next (Resume Here)
+1. **Add OAuth redirect URIs** in Meta and LinkedIn developer dashboards:
+   - Meta: Facebook Login → Settings → Valid OAuth Redirect URIs → add `https://postpilot.growphile.com/api/social/callback`
+   - LinkedIn: Auth tab → Authorized Redirect URLs → add `https://postpilot.growphile.com/api/social/callback`
+2. **Live end-to-end test** — connect Instagram → verify pages → post → verify lands on platform
+3. **Test Facebook, Threads, and LinkedIn** connect flows
+4. **Test cross-platform posting**, comments sync, and analytics
+5. **Token security** — encrypt tokens at rest, implement auto-refresh logic
 
 > **Decision:** Replace Zernio with our own unified API. Phase 1 targets **Instagram, Facebook, and Threads** (all Meta ecosystem — single OAuth). Other platforms come later and show "Coming Soon" in the UI until integrated.
 
@@ -502,8 +548,11 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 | **10** | Pre-test audit + bug fixes | ✅ Done (9 bugs fixed) |
 | **11** | Module-level createClient fixes (Vercel build) | ✅ Done (9 files) |
 | **12** | Background analytics snapshot cron | ✅ Done (daily) |
-| **13** | Deploy to Growphile Vercel | ✅ Live at pulsehub-wine.vercel.app |
-| **14** | End-to-end testing | 🟡 Blocked — Supabase project paused |
+| **13** | Deploy to Growphile Vercel | ✅ Live at postpilot.growphile.com |
+| **14** | Fix critical OAuth bugs (4 bugs) | ✅ Done (all 4 fixed, build passes) |
+| **15** | Custom domain + DNS setup | ✅ Done (postpilot.growphile.com verified) |
+| **16** | Supabase project resume | ✅ Done (live, schema documented) |
+| **17** | End-to-end OAuth test | ⬜ Blocked — needs redirect URIs added to Meta/LinkedIn |
 
 ### Pre-Test Audit Fixes (All 9 resolved)
 
@@ -534,11 +583,12 @@ All API routes and providers had `const supabase = createClient(...)` at module 
 
 | Environment | Account | URL | Status |
 |---|---|---|---|
-| **Production** | growphilebusiness@gmail.com | https://pulsehub-wine.vercel.app | ✅ Live |
+| **Production** | growphilebusiness@gmail.com | https://postpilot.growphile.com | ✅ Live (custom domain) |
+| Preview | growphilebusiness@gmail.com | https://pulsehub-2n69uilfc-growphiles-projects.vercel.app | ✅ Live |
 | Old (deprecated) | ampglobal2025@gmail.com | prepost-app.vercel.app | ❌ Token removed |
 
 - `SOCIAL_PROVIDER=selfhosted` — self-hosted adapters active, Zernio routes delegate to self-hosted
-- Deployed via CLI token (manual deploy, no GitHub auto-deploy)
+- Deployed via CLI token (`vercel --prod`), no GitHub auto-deploy linked
 - Daily cron at `/api/cron/analytics-snapshot` saves follower snapshots at midnight UTC
 
 **Detailed blueprint:** See `docs/SELF_HOSTED_SOCIAL_API_BLUEPRINT.md` for full architecture, code-level details, and risk mitigation.
@@ -547,7 +597,7 @@ All API routes and providers had `const supabase = createClient(...)` at module 
 
 # Analytics — Current State & Deferred Work
 
-> **Note:** Analytics is fully wired in code but blocked on Supabase being paused. Once the project is resumed, the full analytics pipeline will work end-to-end.
+> **Note:** Analytics is fully wired in code and Supabase is live. The analytics pipeline will work end-to-end once OAuth connections are tested and posts are published. Follower snapshots will populate over time via the daily cron.
 
 ### What Analytics Now Shows (Self-Hosted Path)
 
@@ -588,19 +638,26 @@ All API routes and providers had `const supabase = createClient(...)` at module 
 
 ### Deferred: Supabase Project
 
-- **Status:** Paused (free tier auto-pauses after inactivity)
-- **Project URL:** `elsowkdruovxrotbxsmi.supabase.co` — DNS not resolving
-- **Action required:** Resume in Supabase dashboard → project will come back online in ~2 minutes
-- **Impact:** All API routes fail at build time without Supabase env vars; runtime requires live Supabase for auth, account storage, and analytics snapshots
+- **Status:** ✅ Live (resumed from free-tier pause)
+- **Project URL:** `elsowkdruovxrotbxsmi.supabase.co` — DNS resolving
+- **Schema documented:** `database.md` — 15 tables, 6 functions, 7 triggers, 20 indexes, RLS policies, seed data
+- **Remaining:** Analytics snapshot cron needs to populate `analytics_snapshots` over time
 
 ### Deferred: App Approvals
 
 | Platform | App | Status |
 |---|---|---|
-| Meta (IG/FB/Threads) | App ID `28882450258027919` | Not yet submitted for review |
-| LinkedIn | Client ID `77uuuf0gq3wp0e` | Not yet submitted for review |
+| Meta (IG/FB/Threads) | App ID `28882450258027919` | Admin on app — no review needed for testing |
+| LinkedIn | Client ID `77uuuf0gq3wp0e` | Admin on app — no review needed for testing |
 
-Until approved, testing must be done in Development mode by adding accounts as testers.
+> **Note:** Both apps are in developer mode with the user as admin. No App Review submission required for testing. Production access for external users would require review, but for the user's own accounts this is not needed.
+
+### Deferred: OAuth Redirect URIs (Must Do Before Testing)
+
+| Platform | Redirect URI to Add | Where |
+|---|---|---|
+| Meta | `https://postpilot.growphile.com/api/social/callback` | Facebook Login → Settings → Valid OAuth Redirect URIs |
+| LinkedIn | `https://postpilot.growphile.com/api/social/callback` | Auth tab → Authorized Redirect URLs |
 
 ---
 
