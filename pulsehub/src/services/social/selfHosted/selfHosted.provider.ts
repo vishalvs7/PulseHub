@@ -85,6 +85,8 @@ export class SelfHostedProvider implements SocialProvider {
         return await this.handleMetaCallback(request.code, redirectUri, userId, platform);
       } else if (platform === 'linkedin') {
         return await this.handleLinkedInCallback(request.code, redirectUri, userId);
+      } else if (platform === 'reddit' || platform === 'youtube' || platform === 'pinterest') {
+        return await this.handleStandardCallback(request.code, redirectUri, userId, platform);
       } else {
         return { success: false, error: `Platform ${platform} not implemented` };
       }
@@ -208,6 +210,46 @@ export class SelfHostedProvider implements SocialProvider {
     return { success: true, accountId: profile.accountId, username: profile.username, platform: 'linkedin' };
   }
 
+  private async handleStandardCallback(
+    code: string,
+    redirectUri: string,
+    userId: string,
+    platform: CrossPostPlatform
+  ): Promise<CallbackResult> {
+    const adapter = getAdapter(platform);
+    if (!adapter) return { success: false, error: `Platform ${platform} is not configured` };
+
+    const bundle = await adapter.exchangeCode(code, redirectUri);
+    const expiresAt = bundle.expiresIn
+      ? new Date(Date.now() + bundle.expiresIn * 1000).toISOString()
+      : null;
+
+    if (adapter.listConnectOptions) {
+      const options = await adapter.listConnectOptions(bundle.accessToken);
+
+      if (options.length === 0) {
+        const messages: Record<string, string> = {
+          reddit: 'No subreddits found. Subscribe to at least one subreddit first.',
+          pinterest: 'No Pinterest boards found. Create a board first.',
+        };
+        return { success: false, error: messages[platform] || `No ${platform} targets found` };
+      }
+
+      if (options.length === 1) {
+        const option = options[0];
+        await this.storeAccount(userId, platform, option.name, option.id, bundle.accessToken, bundle.refreshToken, expiresAt);
+        return { success: true, accountId: option.id, username: option.name, platform };
+      }
+
+      await this.storeAccount(userId, platform, 'temp', 'pending', bundle.accessToken, bundle.refreshToken, expiresAt);
+      return { success: true, needsSelection: true, selectionOptions: options, platform };
+    }
+
+    const profile = await adapter.getProfile(bundle.accessToken);
+    await this.storeAccount(userId, platform, profile.username, profile.accountId, bundle.accessToken, bundle.refreshToken, expiresAt);
+    return { success: true, accountId: profile.accountId, username: profile.username, platform };
+  }
+
   async listSelectionOptions(platform: CrossPostPlatform, userId: string, state: string): Promise<SelectionOption[]> {
     // Options are returned from handleCallback — this is for re-fetching if needed
     return [];
@@ -217,7 +259,7 @@ export class SelfHostedProvider implements SocialProvider {
     // Retrieve stored token from the temp account (profile_id = 'pending')
     const { data: existing } = await getSupabase()
       .from('social_accounts')
-      .select('access_token')
+      .select('access_token, refresh_token, expires_at')
       .eq('user_id', request.userId)
       .eq('platform', request.platform)
       .eq('profile_id', 'pending')
@@ -239,12 +281,33 @@ export class SelfHostedProvider implements SocialProvider {
       .eq('platform', request.platform)
       .eq('profile_id', 'pending');
 
-    // The selected org/page ID
+    // The selected org/page/board ID
     const selectionId = request.selectionId;
 
-    // Store the account with the real selected org/page ID as profile_id
-    await this.storeAccount(request.userId, request.platform, selectionId, selectionId, accessToken);
-    return { success: true, accountId: selectionId, username: selectionId };
+    // Resolve a human-readable name for the selection where possible
+    let username = selectionId;
+    const adapter = getAdapter(request.platform);
+    if (adapter?.listConnectOptions) {
+      try {
+        const options = await adapter.listConnectOptions(accessToken);
+        const match = options.find((o) => o.id === selectionId);
+        if (match) username = match.name;
+      } catch {
+        // Keep the raw ID as fallback
+      }
+    }
+
+    // Store the account with the real selected org/page/board ID as profile_id
+    await this.storeAccount(
+      request.userId,
+      request.platform,
+      username,
+      selectionId,
+      accessToken,
+      existing.refresh_token || undefined,
+      existing.expires_at || null
+    );
+    return { success: true, accountId: selectionId, username };
   }
 
   async listAccounts(userId: string): Promise<SocialAccount[]> {
@@ -281,16 +344,18 @@ export class SelfHostedProvider implements SocialProvider {
         continue;
       }
 
-      // Get access token for this account
+      // Get access token for this account (refreshing if expired)
       const { data: account } = await getSupabase()
         .from('social_accounts')
-        .select('access_token')
+        .select('*')
         .eq('user_id', input.userId)
         .eq('platform', target.platform)
         .eq('profile_id', target.accountId)
         .single();
 
-      if (!account?.access_token) {
+      const accessToken = account ? await this.resolveAccessToken(account, target.platform) : null;
+
+      if (!accessToken) {
         platformResults.push({
           platform: target.platform,
           accountId: target.accountId,
@@ -309,9 +374,9 @@ export class SelfHostedProvider implements SocialProvider {
       let result;
       if (target.platform === 'threads') {
         const metaAdapter = getMetaAdapter();
-        result = await metaAdapter.publishToThreads(target.accountId, account.access_token, publishPayload);
+        result = await metaAdapter.publishToThreads(target.accountId, accessToken, publishPayload);
       } else {
-        result = await adapter.publish(target.accountId, account.access_token, publishPayload);
+        result = await adapter.publish(target.accountId, accessToken, publishPayload);
       }
 
       platformResults.push({
@@ -423,14 +488,18 @@ export class SelfHostedProvider implements SocialProvider {
 
     const { data: account } = await getSupabase()
       .from('social_accounts')
-      .select('access_token')
+      .select('*')
       .eq('user_id', request.userId)
+      .eq('platform', request.platform)
       .eq('profile_id', request.accountId)
       .single();
 
-    if (!account?.access_token) return [];
+    if (!account) return [];
 
-    return adapter.getComments(request.accountId, account.access_token, request.postId);
+    const accessToken = await this.resolveAccessToken(account, request.platform);
+    if (!accessToken) return [];
+
+    return adapter.getComments(request.accountId, accessToken, request.postId);
   }
 
   async replyToComment(request: ReplyCommentRequest): Promise<Comment> {
@@ -439,14 +508,17 @@ export class SelfHostedProvider implements SocialProvider {
 
     const { data: account } = await getSupabase()
       .from('social_accounts')
-      .select('access_token')
+      .select('*')
       .eq('user_id', request.userId)
       .eq('profile_id', request.accountId)
       .single();
 
-    if (!account?.access_token) throw new Error('No access token');
+    if (!account) throw new Error('No access token');
 
-    return adapter.replyToComment(request.accountId, account.access_token, request.commentId, request.text);
+    const accessToken = await this.resolveAccessToken(account, request.platform);
+    if (!accessToken) throw new Error('No access token');
+
+    return adapter.replyToComment(request.accountId, accessToken, request.commentId, request.text);
   }
 
   // ─── Analytics ───────────────────────────────────────────────────────────
@@ -467,12 +539,15 @@ export class SelfHostedProvider implements SocialProvider {
       const adapter = getAdapter(account.platform as CrossPostPlatform);
       if (!adapter) continue;
 
+      const accessToken = await this.resolveAccessToken(account, account.platform as CrossPostPlatform);
+      if (!accessToken) continue;
+
       const platformImpressions = { impressions: 0, reach: 0, engagement: 0 };
 
       // 1. Get follower stats
       if (adapter.getFollowerStats) {
         try {
-          const stats = await adapter.getFollowerStats(account.profile_id, account.access_token);
+          const stats = await adapter.getFollowerStats(account.profile_id, accessToken);
           platforms.push({
             platform: account.platform as CrossPostPlatform,
             accountId: account.profile_id,
@@ -506,14 +581,19 @@ export class SelfHostedProvider implements SocialProvider {
           if (account.platform === 'instagram' || account.platform === 'facebook' || account.platform === 'threads') {
             const metaAdapter = getMetaAdapter();
             if (account.platform === 'threads') {
-              const threads = await metaAdapter.getRecentThreads(account.profile_id, account.access_token, 25);
+              const threads = await metaAdapter.getRecentThreads(account.profile_id, accessToken, 25);
               recentPosts = threads.map(t => ({ id: t.id, text: t.text, timestamp: t.timestamp, mediaType: t.mediaType }));
             } else {
-              const media = await metaAdapter.getRecentMedia(account.profile_id, account.access_token, 25);
+              const media = await metaAdapter.getRecentMedia(account.profile_id, accessToken, 25);
               recentPosts = media.map(m => ({ id: m.id, text: m.caption, timestamp: m.timestamp, mediaType: m.mediaType }));
             }
           } else if (account.platform === 'linkedin' && adapter.getRecentPosts) {
-            recentPosts = await adapter.getRecentPosts(account.profile_id, account.access_token, 25);
+            recentPosts = await adapter.getRecentPosts(account.profile_id, accessToken, 25);
+          } else if (
+            (account.platform === 'youtube' || account.platform === 'pinterest') &&
+            adapter.getRecentPosts
+          ) {
+            recentPosts = await adapter.getRecentPosts(account.profile_id, accessToken, 25);
           }
 
           // Get insights for each post
@@ -525,9 +605,9 @@ export class SelfHostedProvider implements SocialProvider {
 
               if (account.platform === 'threads') {
                 const metaAdapter = getMetaAdapter();
-                insights = await metaAdapter.getThreadsInsights(account.profile_id, account.access_token, post.id);
+                insights = await metaAdapter.getThreadsInsights(account.profile_id, accessToken, post.id);
               } else {
-                insights = await adapter.getPostInsights(account.profile_id, account.access_token, post.id);
+                insights = await adapter.getPostInsights(account.profile_id, accessToken, post.id);
               }
 
               platformImpressions.impressions += insights.impressions || 0;
@@ -626,8 +706,18 @@ export class SelfHostedProvider implements SocialProvider {
     platform: string,
     username: string,
     profileId: string,
-    accessToken: string
+    accessToken: string,
+    refreshToken?: string | null,
+    expiresAt?: string | null
   ): Promise<void> {
+    const tokenFields: Record<string, unknown> = {
+      access_token: accessToken,
+      is_connected: true,
+      last_synced: new Date().toISOString(),
+    };
+    if (refreshToken !== undefined) tokenFields.refresh_token = refreshToken;
+    if (expiresAt !== undefined) tokenFields.expires_at = expiresAt;
+
     // Upsert — if account with same profile_id exists, update; otherwise insert
     const { data: existing } = await getSupabase()
       .from('social_accounts')
@@ -640,12 +730,7 @@ export class SelfHostedProvider implements SocialProvider {
     if (existing) {
       await getSupabase()
         .from('social_accounts')
-        .update({
-          username,
-          access_token: accessToken,
-          is_connected: true,
-          last_synced: new Date().toISOString(),
-        })
+        .update({ username, ...tokenFields })
         .eq('id', existing.id);
     } else {
       await getSupabase().from('social_accounts').insert({
@@ -653,10 +738,43 @@ export class SelfHostedProvider implements SocialProvider {
         platform,
         username,
         profile_id: profileId,
-        access_token: accessToken,
-        is_connected: true,
-        last_synced: new Date().toISOString(),
+        ...tokenFields,
       });
     }
+  }
+
+  private async resolveAccessToken(
+    account: { id: string; access_token: string; refresh_token?: string | null; expires_at?: string | null },
+    platform: CrossPostPlatform
+  ): Promise<string | null> {
+    if (!account?.access_token) return null;
+
+    const expired = account.expires_at
+      ? new Date(account.expires_at).getTime() < Date.now() + 60 * 1000
+      : false;
+
+    if (expired && account.refresh_token) {
+      const adapter = getAdapter(platform);
+      if (adapter?.refreshToken) {
+        try {
+          const bundle = await adapter.refreshToken(account.refresh_token);
+          await getSupabase()
+            .from('social_accounts')
+            .update({
+              access_token: bundle.accessToken,
+              refresh_token: bundle.refreshToken || account.refresh_token,
+              expires_at: bundle.expiresIn
+                ? new Date(Date.now() + bundle.expiresIn * 1000).toISOString()
+                : null,
+            })
+            .eq('id', account.id);
+          return bundle.accessToken;
+        } catch {
+          // Fall through — let the platform reject the stale token
+        }
+      }
+    }
+
+    return account.access_token;
   }
 }

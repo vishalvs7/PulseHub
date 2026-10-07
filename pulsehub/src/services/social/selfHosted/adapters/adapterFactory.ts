@@ -2,6 +2,9 @@ import type { PlatformAdapter } from '../../contracts/types';
 import type { CrossPostPlatform } from '@/lib/socialPlatforms';
 import { MetaAdapter } from './meta.adapter';
 import { LinkedInAdapter } from './linkedin.adapter';
+import { RedditAdapter } from './reddit.adapter';
+import { YouTubeAdapter } from './youtube.adapter';
+import { PinterestAdapter } from './pinterest.adapter';
 
 const adapters: Partial<Record<CrossPostPlatform, PlatformAdapter>> = {};
 
@@ -20,6 +23,18 @@ export function getAdapter(platform: CrossPostPlatform): PlatformAdapter | null 
     case 'linkedin':
       const linkedin = new LinkedInAdapter();
       if (linkedin.isConfigured()) adapter = linkedin;
+      break;
+    case 'reddit':
+      const reddit = new RedditAdapter();
+      if (reddit.isConfigured()) adapter = reddit;
+      break;
+    case 'youtube':
+      const youtube = new YouTubeAdapter();
+      if (youtube.isConfigured()) adapter = youtube;
+      break;
+    case 'pinterest':
+      const pinterest = new PinterestAdapter();
+      if (pinterest.isConfigured()) adapter = pinterest;
       break;
     default:
       adapter = null;
@@ -42,7 +57,7 @@ export function isPlatformSupported(platform: CrossPostPlatform): boolean {
 
 export function getSupportedPlatforms(): CrossPostPlatform[] {
   const supported: CrossPostPlatform[] = [];
-  const platforms: CrossPostPlatform[] = ['instagram', 'facebook', 'threads', 'linkedin'];
+  const platforms: CrossPostPlatform[] = ['instagram', 'facebook', 'threads', 'linkedin', 'reddit', 'youtube', 'pinterest'];
   for (const p of platforms) {
     if (isPlatformSupported(p)) supported.push(p);
   }

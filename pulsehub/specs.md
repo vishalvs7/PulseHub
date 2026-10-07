@@ -395,7 +395,17 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 
 ## What Was Done Recently
 
-### 0. Self-Hosted OAuth Fixes + Production Deploy (Latest)
+### 0. Phase 3 Platform Adapters — Reddit, YouTube, Pinterest (Latest)
+- **3 new self-hosted adapters built:** `reddit.adapter.ts`, `youtube.adapter.ts`, `pinterest.adapter.ts` — registered in `adapterFactory.ts`; generic `handleStandardCallback` added to `selfHosted.provider.ts` (same selection pattern as FB/LinkedIn: **Reddit → pick subreddit**, **Pinterest → pick board** at connect time via new optional `PlatformAdapter.listConnectOptions()`; YouTube stores the channel directly).
+- **Publish behavior:** Reddit — text/link posts to selected subreddit (title auto-derived from first line, User-Agent set as required); YouTube — multipart video upload (250MB cap, first line = title, rest = description, image-only content rejected gracefully); Pinterest — image pin to selected board (video/document rejected gracefully).
+- **Token auto-refresh infrastructure:** `storeAccount` now persists `refresh_token` + `expires_at`; new `resolveAccessToken()` refreshes expired tokens before **publish, comments, and analytics** (YouTube: 1h access + refresh token, consent screen must be **Production** or Google kills refresh tokens in 7 days; Reddit: hourly + `duration=permanent` refresh; Pinterest: long-lived, no refresh).
+- **LinkedIn scope fix:** `r_liteprofile` (deprecated — cannot call `/v2/userinfo`) → `openid profile`. Requires adding the **"Sign in with LinkedIn using OpenID Connect"** product to the LinkedIn app — likely cause of the failed live test.
+- **Env:** `REDDIT_CLIENT_ID/SECRET`, `GOOGLE_CLIENT_ID/SECRET`, `PINTEREST_APP_ID/SECRET` added to `.env.example` (adapters auto-disable until set).
+- **No UI changes required** — `PLATFORM_LIST`, composer content-type eligibility, `connections/select` pages, and DB platform checks (migration `00003`) already covered all platforms.
+- **DB:** no migration needed — `social_accounts` already has `refresh_token`/`expires_at` columns and widened platform checks.
+- `npm run build` green. **Redirect URIs:** LinkedIn ✅ added; Meta ❌ (dashboard save bug — value doesn't persist, known Meta outage); Reddit/Google/Pinterest ⬜ pending app creation.
+
+### 0. Self-Hosted OAuth Fixes + Production Deploy
 - **4 critical bugs fixed** in the self-hosted social integration layer:
   - **BUG #1** (`selfHosted.provider.ts`): Platform detection — removed `.eq('platform', ...)` from state query; platform now read from `stateRecord.platform`, fixing Facebook/Threads/LinkedIn OAuth detection.
   - **BUG #2** (`callback/route.ts`): OAuth callback redirect — rewrote to look up user role from `social_accounts` + `users` tables; redirects to `/brand/{uid}/connections` or `/influencer/{uid}/connections` (was redirecting to non-existent `/connections`).
@@ -466,13 +476,15 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 - ✅ **Self-hosted OAuth integration** — Meta (IG/FB/Threads) + LinkedIn adapters built, platform detection fixed, multi-account selection flow fixed
 - ✅ **Custom domain** — `postpilot.growphile.com` live, DNS verified, Vercel alias configured
 - ✅ **Supabase live** — project resumed, database.md documented (15 tables, 6 functions, 7 triggers, 20 indexes)
+- ✅ **Phase 3 adapters** — Reddit, YouTube, Pinterest built + registered + token auto-refresh wired (build green; awaiting app creds for live test)
 
 ## What's Not Working / Not Built
 
-- ❌ **Live OAuth test not yet run** — all 4 platform connect flows fixed in code but not verified end-to-end with real Meta/LinkedIn accounts
-- ❌ **OAuth redirect URIs not yet added** — user must add `https://postpilot.growphile.com/api/social/callback` in Meta and LinkedIn developer dashboards
-- ❌ **Token vault / encryption / refresh** — tokens stored in plaintext in `social_accounts` table; needs encryption at rest + auto-refresh logic
-- ❌ **YouTube, Reddit, Pinterest, X/Twitter, TikTok** — not yet integrated (show "Coming Soon" in UI)
+- ❌ **Live OAuth test not yet run** — all connect flows fixed in code but not verified end-to-end with real accounts (LinkedIn blocked on missing OIDC product + Company Page; Meta blocked on redirect-URI save bug)
+- ❌ **OAuth redirect URIs** — Meta ❌ (dashboard bug, won't persist), LinkedIn ✅, Reddit/Google/Pinterest ⬜ pending app creation (see Master Redirect URI Table)
+- 🟡 **Phase 3 (YouTube, Reddit, Pinterest)** — adapters built + wired this session; awaiting app creds from you, then live test
+- ❌ **X/Twitter, TikTok** — not integrated (X deferred: needs paid API tier; TikTok approval-gated)
+- ❌ **Token vault / encryption at rest** — tokens still plaintext in `social_accounts`; auto-refresh now implemented (YouTube/Reddit), Meta 60-day exchange exists
 - ❌ **Real-time deal-based chat** + anti-leakage sanitization — inbox is placeholder UI
 - ❌ **Unified analytics pipeline** (cron 6–12h) + unified `views` metric — snapshots exist, no worker
 - ❌ **Admin panel** — no admin dashboard page
@@ -502,20 +514,55 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 ## Next Steps — Self-Hosted Unified Social API
 
 ### What's Done (as of Latest Session)
-- ✅ All 4 platform adapters built (Meta IG/FB/Threads + LinkedIn)
+- ✅ All **7 platform adapters** built — Meta (IG/FB/Threads), LinkedIn, **Reddit, YouTube, Pinterest** (Phase 3 built this session)
 - ✅ All 4 critical OAuth bugs fixed (platform detection, callback redirect, post accountId, multi-account selection)
+- ✅ **Token auto-refresh infrastructure** — `resolveAccessToken()` in `selfHosted.provider.ts` refreshes expired tokens before publish/comments/analytics (YouTube + Reddit wired; Meta 60-day exchange exists; Pinterest tokens are long-lived)
+- ✅ LinkedIn scope fix — `r_liteprofile` (deprecated) → `openid profile` (required for `/v2/userinfo`)
 - ✅ Custom domain `postpilot.growphile.com` deployed and verified
-- ✅ Supabase project resumed and live
-- ✅ `database.md` created with full schema reference
+- ✅ Supabase project resumed and live; `database.md` created
+- ✅ `npm run build` green; no UI changes needed (PLATFORM_LIST, composer eligibility, select pages already covered the new platforms)
 
-### What's Next (Resume Here)
-1. **Add OAuth redirect URIs** in Meta and LinkedIn developer dashboards:
-   - Meta: Facebook Login → Settings → Valid OAuth Redirect URIs → add `https://postpilot.growphile.com/api/social/callback`
-   - LinkedIn: Auth tab → Authorized Redirect URLs → add `https://postpilot.growphile.com/api/social/callback`
-2. **Live end-to-end test** — connect Instagram → verify pages → post → verify lands on platform
-3. **Test Facebook, Threads, and LinkedIn** connect flows
-4. **Test cross-platform posting**, comments sync, and analytics
-5. **Token security** — encrypt tokens at rest, implement auto-refresh logic
+### 🔑 Master Redirect URI Table (all platforms — same URI everywhere)
+
+```
+https://postpilot.growphile.com/api/social/callback
+```
+
+| Platform | Where to add | Status |
+|---|---|---|
+| **Meta (IG/FB/Threads)** | `developers.facebook.com/apps/28882450258027919/fb-login/settings/` → Valid OAuth Redirect URIs | ❌ **Blocked** — Meta dashboard bug: save succeeds but doesn't persist (known outage; retry daily + report in developer forum) |
+| **LinkedIn** | Developer Portal → Auth tab → Authorized Redirect URLs | ✅ Done |
+| **Reddit** | reddit.com/prefs/apps → create app (type **script**) → "redirect uri" field | ⬜ Waiting on app creation |
+| **Google (YouTube)** | console.cloud.google.com → Credentials → OAuth client → Authorized redirect URIs | ⬜ Waiting on app creation |
+| **Pinterest** | developers.pinterest.com → your app → Redirect URI | ⬜ Waiting on app creation |
+
+### 📋 What I Need From You (next session pickup)
+
+**A. Create the 3 new apps + send creds** (add to `.env.local` and Vercel):
+- [ ] **Reddit** — reddit.com/prefs/apps → type *script* → set redirect URI → send `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET`
+- [ ] **Google/YouTube** — console.cloud.google.com → enable YouTube Data API v3 → OAuth consent screen → set to **Production** (Testing mode kills refresh tokens after 7 days) → OAuth client → set redirect URI → send `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`
+- [ ] **Pinterest** — developers.pinterest.com → create app → set redirect URI → send `PINTEREST_APP_ID` + `PINTEREST_APP_SECRET`
+
+**B. Fix LinkedIn (2 likely causes of the failed test):**
+- [ ] Add **"Sign in with LinkedIn using OpenID Connect"** product to the LinkedIn app (new scopes are `openid profile` — without this product, authorize fails)
+- [ ] Create a **LinkedIn Company Page** (checklist item still open — without one, the org-selection step breaks)
+- [ ] If still failing: send the **exact error text + where it stopped** (LinkedIn page vs. after redirect back to PulseHub)
+
+**C. Meta (blocked on their bug):**
+- [ ] Retry the redirect-URI save daily — `developers.facebook.com/apps/28882450258027919/fb-login/settings/`
+- [ ] Report the repro in developers.facebook.com/community (save succeeds → form blanks → validator fails)
+
+**D. Open from before (still unchecked):**
+- [ ] Instagram Business account linked to a Facebook Page
+- [ ] Your Facebook + LinkedIn accounts added as testers in both apps
+
+**E. Test order once creds are in:**
+1. LinkedIn live test (URI already added — first verified e2e of the engine)
+2. Reddit connect → select subreddit → post → verify on Reddit
+3. YouTube connect → upload video → verify on channel (watch quota: ~6 uploads/day)
+4. Pinterest connect → select board → image pin → verify
+5. Meta when the URI bug clears
+6. Cross-platform posting + comments sync + analytics after all connect
 
 > **Decision:** Replace Zernio with our own unified API. Phase 1 targets **Instagram, Facebook, and Threads** (all Meta ecosystem — single OAuth). Other platforms come later and show "Coming Soon" in the UI until integrated.
 
@@ -525,7 +572,7 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 |---|---|---|
 | **Phase 1 (done)** | Instagram, Facebook, Threads | ✅ Built + Proxy Wired + Deployed |
 | **Phase 2 (done)** | LinkedIn | ✅ Built + Proxy Wired + Deployed |
-| **Phase 3 (next)** | YouTube, Reddit, Pinterest | Building |
+| **Phase 3 (next)** | YouTube, Reddit, Pinterest | ✅ Adapters built (this session) — awaiting app creds + live test |
 | **Phase 4** | X/Twitter | Planned |
 | **Phase 5** | TikTok | Planned (approval gated) |
 | **Future** | Snapchat, Discord | Considered |
@@ -552,7 +599,10 @@ Recent working sessions and their outcomes. Supabase is now the **live productio
 | **14** | Fix critical OAuth bugs (4 bugs) | ✅ Done (all 4 fixed, build passes) |
 | **15** | Custom domain + DNS setup | ✅ Done (postpilot.growphile.com verified) |
 | **16** | Supabase project resume | ✅ Done (live, schema documented) |
-| **17** | End-to-end OAuth test | ⬜ Blocked — needs redirect URIs added to Meta/LinkedIn |
+| **17** | End-to-end OAuth test | ⬜ Blocked — Meta URI bug; LinkedIn needs OIDC product + Company Page |
+| **18** | Phase 3 adapters (Reddit, YouTube, Pinterest) | ✅ Done (built + registered, build green, awaiting app creds) |
+| **19** | Token auto-refresh (`resolveAccessToken`) | ✅ Done (YouTube/Reddit refresh wired; used in publish/comments/analytics) |
+| **20** | LinkedIn scope fix (`openid profile`) | ✅ Done — requires "Sign in with LinkedIn using OpenID Connect" product on the app |
 
 ### Pre-Test Audit Fixes (All 9 resolved)
 
@@ -654,10 +704,7 @@ All API routes and providers had `const supabase = createClient(...)` at module 
 
 ### Deferred: OAuth Redirect URIs (Must Do Before Testing)
 
-| Platform | Redirect URI to Add | Where |
-|---|---|---|
-| Meta | `https://postpilot.growphile.com/api/social/callback` | Facebook Login → Settings → Valid OAuth Redirect URIs |
-| LinkedIn | `https://postpilot.growphile.com/api/social/callback` | Auth tab → Authorized Redirect URLs |
+> **→ See the Master Redirect URI Table in "Next Steps — Self-Hosted Unified Social API" above.** All five platforms use the same URI: `https://postpilot.growphile.com/api/social/callback`. LinkedIn ✅ done; Meta blocked on a Meta dashboard bug; Reddit/Google/Pinterest pending app creation.
 
 ---
 
@@ -1021,6 +1068,8 @@ SOCIAL_PROVIDER=selfhosted  # Flipped from zernio — self-hosted is now active
 - [x] `SOCIAL_PROVIDER` flipped to `selfhosted`
 
 **Build complete. Awaiting: app tester approvals + live OAuth testing.**
+
+> **Update (Phase 3):** Reddit + Google/YouTube + Pinterest apps still to be created — see **"📋 What I Need From You (next session pickup)"** in the Next Steps section above. The three env var pairs from those apps are the only blockers for testing all new platforms.
 
 ---
 

@@ -280,6 +280,9 @@ export interface PlatformAdapter {
   refreshToken?(refreshToken: string): Promise<TokenBundle>;
   getProfile(accessToken: string): Promise<{ accountId: string; username: string }>;
 
+  // Connect-time selection (e.g. Reddit subreddits, Pinterest boards)
+  listConnectOptions?(accessToken: string): Promise<SelectionOption[]>;
+
   // Posting
   publish(accountId: string, accessToken: string, payload: PublishPayload): Promise<PublishResult>;
   deletePost?(accountId: string, accessToken: string, platformPostId: string): Promise<void>;

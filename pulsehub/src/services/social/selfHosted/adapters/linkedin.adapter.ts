@@ -28,7 +28,7 @@ export class LinkedInAdapter implements PlatformAdapter {
   // ─── OAuth ───────────────────────────────────────────────────────────────
 
   getAuthorizeUrl(redirectUri: string, state: string): string {
-    const scopes = ['w_member_social', 'r_liteprofile', 'w_organization_social'].join(' ');
+    const scopes = ['w_member_social', 'openid', 'profile', 'w_organization_social'].join(' ');
 
     const params = new URLSearchParams({
       client_id: this.clientId,
