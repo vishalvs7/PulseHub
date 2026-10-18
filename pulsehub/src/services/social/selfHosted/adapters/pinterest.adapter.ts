@@ -7,6 +7,7 @@ import type {
 } from '../../contracts/types';
 
 const PINTEREST_OAUTH_BASE = 'https://www.pinterest.com/oauth/';
+const PINTEREST_TOKEN_URL = 'https://api.pinterest.com/v5/oauth/token';
 const PINTEREST_API_BASE = 'https://api.pinterest.com/v5';
 const SCOPES = 'boards:read,boards:write,pins:read,pins:write,user_accounts:read';
 
@@ -42,7 +43,7 @@ export class PinterestAdapter implements PlatformAdapter {
   async exchangeCode(code: string, redirectUri: string): Promise<TokenBundle> {
     const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
 
-    const res = await fetch(PINTEREST_OAUTH_BASE, {
+    const res = await fetch(PINTEREST_TOKEN_URL, {
       method: 'POST',
       headers: {
         Authorization: `Basic ${basic}`,
@@ -60,9 +61,37 @@ export class PinterestAdapter implements PlatformAdapter {
       throw new Error(data.message || `Pinterest token error (${res.status})`);
     }
 
-    // Pinterest access tokens are long-lived (no expiry, no refresh)
     return {
       accessToken: data.access_token,
+      refreshToken: data.refresh_token || undefined,
+      expiresIn: data.expires_in,
+      tokenType: data.token_type,
+    };
+  }
+
+  async refreshToken(refreshToken: string): Promise<TokenBundle> {
+    const basic = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+
+    const res = await fetch(PINTEREST_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${basic}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token',
+        refresh_token: refreshToken,
+      }).toString(),
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.code) {
+      throw new Error(data.message || `Pinterest refresh error (${res.status})`);
+    }
+
+    return {
+      accessToken: data.access_token,
+      refreshToken: data.refresh_token || refreshToken,
       expiresIn: data.expires_in,
       tokenType: data.token_type,
     };
@@ -103,7 +132,7 @@ export class PinterestAdapter implements PlatformAdapter {
     const description = (lines.length > 1 ? lines.slice(1).join('\n') : content).slice(0, 500);
 
     const body: Record<string, unknown> = {
-      board: accountId,
+      board_id: accountId,
       description,
       media_source: {
         source_type: 'image_url',

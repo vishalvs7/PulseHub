@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSocialProvider } from '@/services/social/contracts';
 import { createClient } from '@supabase/supabase-js';
 
+import { requireUser } from '@/lib/auth/server-auth';
+
 function getSupabase() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -9,18 +11,24 @@ function getSupabase() {
   );
 }
 
-async function requireUser(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (!authHeader) return null;
+async function resolveUser(request: NextRequest) {
+  try {
+    const user = await requireUser();
+    if (user) return user;
+  } catch {}
 
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user } } = await getSupabase().auth.getUser(token);
-  return user;
+  const authHeader = request.headers.get('authorization');
+  if (authHeader) {
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user } } = await getSupabase().auth.getUser(token);
+    return user;
+  }
+  return null;
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await requireUser(request);
+    const user = await resolveUser(request);
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

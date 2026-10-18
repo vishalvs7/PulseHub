@@ -35,7 +35,6 @@ export default function ZernioConnections({ userId }: ZernioConnectionsProps) {
   // Add-account modal
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedPlatform, setSelectedPlatform] = useState<CrossPostPlatform | ''>('');
-  const [accountName, setAccountName] = useState('');
   const [pending, setPending] = useState<{ platform: CrossPostPlatform; name: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -77,7 +76,6 @@ export default function ZernioConnections({ userId }: ZernioConnectionsProps) {
 
   const openModal = () => {
     setSelectedPlatform('');
-    setAccountName('');
     setError('');
     setMessage('');
     setModalOpen(true);
@@ -88,38 +86,32 @@ export default function ZernioConnections({ userId }: ZernioConnectionsProps) {
     setPending(null);
   };
 
-  const handleConnect = async () => {
-    if (!selectedPlatform) {
+  const handleConnect = async (platformOverride?: CrossPostPlatform) => {
+    const platform = platformOverride || selectedPlatform;
+    if (!platform) {
       setError('Choose the social platform for this account.');
-      return;
-    }
-    if (!accountName.trim()) {
-      setError('Add the account username or a label (e.g. @acme_news).');
       return;
     }
     setError('');
     setMessage('');
     setConnecting(true);
     try {
-      const res = await fetch('/api/social/zernio/connect', {
+      const res = await fetch('/api/social/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ platform: selectedPlatform }),
+        body: JSON.stringify({ platform }),
       });
       const json = await res.json();
       if (!res.ok) {
         setError(json.error || 'Failed to start connection.');
         return;
       }
-      // Open the platform's own OAuth page in a new tab; on completion the
-      // browser returns to PulseHub (?connected=1) and the account syncs
-      // automatically.
-      window.open(json.authUrl, '_blank');
-      setPending({ platform: selectedPlatform, name: accountName.trim() });
-      setModalOpen(false);
-      setMessage(
-        `Authorize in the new tab — you'll be brought back to PulseHub and the ${PLATFORM_LIST.find((p) => p.id === selectedPlatform)?.name || selectedPlatform} account will be added automatically.`
-      );
+      if (json.authUrl) {
+        // Redirect directly to the platform's OAuth login page
+        window.location.href = json.authUrl;
+      } else {
+        setError('No authorization URL returned from server.');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Connection failed.');
     } finally {
@@ -349,20 +341,8 @@ export default function ZernioConnections({ userId }: ZernioConnectionsProps) {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-secondary-700 mb-2">
-                  Username or label
-                </label>
-                <input
-                  value={accountName}
-                  onChange={(e) => setAccountName(e.target.value)}
-                  placeholder={selectedPlatform ? `e.g. @your${selectedPlatform}handle` : 'Pick a platform first'}
-                  disabled={!selectedPlatform}
-                  className="w-full px-4 py-3 border border-secondary-300 rounded-lg focus:border-primary-500 focus:ring-2 focus:ring-primary-200 outline-none disabled:bg-secondary-100 disabled:text-secondary-400"
-                />
-                <p className="text-xs text-secondary-500 mt-1">
-                  Used as a label until the platform returns your verified handle.
-                </p>
+              <div className="p-3 bg-secondary-50 border border-secondary-200 rounded-lg text-xs text-secondary-600">
+                You will be redirected to {selectedPlatform ? PLATFORM_LIST.find((p) => p.id === selectedPlatform)?.name : 'the platform'} to securely sign in. Your verified profile handle and avatar will be linked automatically.
               </div>
 
               {error && (
@@ -374,15 +354,17 @@ export default function ZernioConnections({ userId }: ZernioConnectionsProps) {
 
               <Button
                 className="w-full bg-gradient-to-r from-primary-600 to-accent-600 hover:from-primary-700 hover:to-accent-700"
-                onClick={handleConnect}
+                onClick={() => handleConnect()}
                 loading={connecting}
-                disabled={connecting}
-                icon={<Link2 className="w-4 h-4" />}
+                disabled={!selectedPlatform || connecting}
+                icon={<ExternalLink className="w-4 h-4" />}
               >
-                Continue & authorize
+                {selectedPlatform
+                  ? `Continue to ${PLATFORM_LIST.find((p) => p.id === selectedPlatform)?.name}`
+                  : 'Select a platform above'}
               </Button>
               <p className="text-center text-xs text-secondary-400">
-                Opens the platform authorization in a new tab. Sync afterwards to finish.
+                You will be redirected back here automatically once authorization is complete.
               </p>
             </div>
           </div>

@@ -5,6 +5,7 @@ import type {
   TokenBundle,
   Comment,
   PostAnalytics,
+  CrossPostPlatform,
 } from '../../contracts/types';
 
 const GRAPH_API_VERSION = 'v21.0';
@@ -18,14 +19,20 @@ interface MetaTokenBundle extends TokenBundle {
 }
 
 export class MetaAdapter implements PlatformAdapter {
-  platform = 'instagram' as const;
+  platform: CrossPostPlatform = 'instagram';
 
   private appId: string;
   private appSecret: string;
 
-  constructor() {
-    this.appId = process.env.META_APP_ID || '';
-    this.appSecret = process.env.META_APP_SECRET || '';
+  constructor(platform: 'instagram' | 'facebook' | 'threads' = 'instagram') {
+    this.platform = platform;
+    if (platform === 'threads' && process.env.THREADS_APP_ID) {
+      this.appId = process.env.THREADS_APP_ID;
+      this.appSecret = process.env.THREADS_APP_SECRET || '';
+    } else {
+      this.appId = process.env.META_APP_ID || '';
+      this.appSecret = process.env.META_APP_SECRET || '';
+    }
   }
 
   isConfigured(): boolean {
@@ -35,16 +42,62 @@ export class MetaAdapter implements PlatformAdapter {
   // ─── OAuth ───────────────────────────────────────────────────────────────
 
   getAuthorizeUrl(redirectUri: string, state: string): string {
+    if (this.platform === 'threads') {
+      const scopes = ['threads_basic', 'threads_content_publish', 'threads_manage_replies'].join(',');
+      const params = new URLSearchParams({
+        client_id: this.appId,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: scopes,
+        state,
+      });
+      return `https://threads.net/oauth/authorize?${params.toString()}`;
+    }
+
+    if (this.platform === 'facebook') {
+      const scopes = [
+        'pages_show_list',
+        'pages_read_engagement',
+        'pages_manage_posts',
+      ].join(',');
+      const params = new URLSearchParams({
+        client_id: this.appId,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: scopes,
+        state,
+      });
+      return `https://www.facebook.com/${GRAPH_API_VERSION}/dialog/oauth?${params.toString()}`;
+    }
+
+    // Direct Instagram Login if configured
+    const igAppId = process.env.INSTAGRAM_APP_ID || this.appId;
+    if (process.env.INSTAGRAM_APP_ID) {
+      const scopes = [
+        'instagram_business_basic',
+        'instagram_business_manage_messages',
+        'instagram_business_manage_comments',
+        'instagram_business_content_publish',
+      ].join(',');
+      const params = new URLSearchParams({
+        enable_fb_login: '0',
+        force_authentication: '1',
+        client_id: igAppId,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: scopes,
+        state,
+      });
+      return `https://www.instagram.com/oauth/authorize?${params.toString()}`;
+    }
+
+    // Fallback Instagram login via Facebook dialog
     const scopes = [
       'instagram_basic',
       'instagram_content_publish',
       'instagram_manage_comments',
       'pages_read_engagement',
       'pages_show_list',
-      'pages_manage_posts',
-      'threads_basic',
-      'threads_content_publish',
-      'threads_manage_replies',
     ].join(',');
 
     const params = new URLSearchParams({
@@ -59,6 +112,53 @@ export class MetaAdapter implements PlatformAdapter {
   }
 
   async exchangeCode(code: string, redirectUri: string): Promise<MetaTokenBundle> {
+    if (this.platform === 'threads') {
+      const form = new URLSearchParams({
+        client_id: this.appId,
+        client_secret: this.appSecret,
+        grant_type: 'authorization_code',
+        redirect_uri: redirectUri,
+        code,
+      });
+      const tokenRes = await fetch('https://graph.threads.net/oauth/access_token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form.toString(),
+      });
+      const tokenData = await tokenRes.json();
+      if (tokenData.error) throw new Error(tokenData.error_message || tokenData.error.message || JSON.stringify(tokenData));
+
+      const shortLivedToken = tokenData.access_token;
+      const threadsUserId = tokenData.user_id;
+
+      // Step 2: Exchange for long-lived Threads token (60 days)
+      let longLivedToken = shortLivedToken;
+      try {
+        const longLivedRes = await fetch(
+          `https://graph.threads.net/access_token?grant_type=th_exchange_token&client_secret=${this.appSecret}&access_token=${shortLivedToken}`
+        );
+        const longLivedData = await longLivedRes.json();
+        if (longLivedData.access_token) longLivedToken = longLivedData.access_token;
+      } catch {
+        // Fall back to short-lived
+      }
+
+      let username = '';
+      try {
+        const profRes = await fetch(`https://graph.threads.net/v1.0/me?fields=id,username&access_token=${longLivedToken}`);
+        const profData = await profRes.json();
+        username = profData.username || '';
+      } catch {
+        username = `threads_${threadsUserId}`;
+      }
+
+      return {
+        accessToken: longLivedToken,
+        accountId: String(threadsUserId),
+        username,
+      };
+    }
+
     // Step 1: Exchange code for short-lived user token
     const tokenRes = await fetch(
       `${GRAPH_BASE}/oauth/access_token?client_id=${this.appId}&client_secret=${this.appSecret}&code=${code}&redirect_uri=${encodeURIComponent(redirectUri)}`
@@ -118,25 +218,43 @@ export class MetaAdapter implements PlatformAdapter {
   // ─── Publishing ──────────────────────────────────────────────────────────
 
   async publish(accountId: string, accessToken: string, payload: PublishPayload): Promise<PublishResult> {
+    if (this.platform === 'threads') {
+      return await this.publishToThreads(accountId, accessToken, payload);
+    }
+
     const hasMedia = payload.mediaItems && payload.mediaItems.length > 0;
     const isVideo = hasMedia && payload.mediaItems![0].type === 'video';
     const mediaUrl = hasMedia ? payload.mediaItems![0].url : undefined;
 
     try {
+      if (this.platform === 'facebook') {
+        if (isVideo) {
+          return await this.publishFacebookVideo(accountId, accessToken, payload.content, mediaUrl!);
+        } else if (hasMedia) {
+          return await this.publishFacebookPhoto(accountId, accessToken, payload.content, mediaUrl!);
+        } else {
+          return await this.publishFacebookText(accountId, accessToken, payload.content);
+        }
+      }
+
+      // Instagram Publishing (requires media)
+      if (!hasMedia) {
+        return { success: false, error: 'Instagram requires an image or video to publish a post.' };
+      }
+
       if (isVideo) {
-        return await this.publishVideo(accountId, accessToken, payload.content, mediaUrl!);
-      } else if (hasMedia) {
-        return await this.publishImage(accountId, accessToken, payload.content, mediaUrl!);
+        return await this.publishInstagramVideo(accountId, accessToken, payload.content, mediaUrl!);
       } else {
-        return await this.publishText(accountId, accessToken, payload.content);
+        return await this.publishInstagramImage(accountId, accessToken, payload.content, mediaUrl!);
       }
     } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
 
-  private async publishImage(accountId: string, accessToken: string, caption: string, imageUrl: string): Promise<PublishResult> {
-    // Step 1: Create media container
+  // ─── Instagram Publishing ────────────────────────────────────────────────
+
+  private async publishInstagramImage(accountId: string, accessToken: string, caption: string, imageUrl: string): Promise<PublishResult> {
     const containerRes = await fetch(`${GRAPH_BASE}/${accountId}/media`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -149,7 +267,6 @@ export class MetaAdapter implements PlatformAdapter {
     const container = await containerRes.json();
     if (container.error) throw new Error(container.error.message);
 
-    // Step 2: Publish container
     const publishRes = await fetch(`${GRAPH_BASE}/${accountId}/media_publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -164,8 +281,7 @@ export class MetaAdapter implements PlatformAdapter {
     return { success: true, platformPostId: result.id };
   }
 
-  private async publishVideo(accountId: string, accessToken: string, caption: string, videoUrl: string): Promise<PublishResult> {
-    // Step 1: Create video container
+  private async publishInstagramVideo(accountId: string, accessToken: string, caption: string, videoUrl: string): Promise<PublishResult> {
     const containerRes = await fetch(`${GRAPH_BASE}/${accountId}/media`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -179,7 +295,6 @@ export class MetaAdapter implements PlatformAdapter {
     const container = await containerRes.json();
     if (container.error) throw new Error(container.error.message);
 
-    // Step 2: Wait for processing (poll status)
     let status = 'PROCESSING';
     let attempts = 0;
     while (status === 'PROCESSING' && attempts < 30) {
@@ -196,7 +311,6 @@ export class MetaAdapter implements PlatformAdapter {
       throw new Error(`Video processing ${status.toLowerCase()}`);
     }
 
-    // Step 3: Publish
     const publishRes = await fetch(`${GRAPH_BASE}/${accountId}/media_publish`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -211,13 +325,46 @@ export class MetaAdapter implements PlatformAdapter {
     return { success: true, platformPostId: result.id };
   }
 
-  private async publishText(accountId: string, accessToken: string, text: string): Promise<PublishResult> {
-    // Facebook page text post
+  // ─── Facebook Publishing ─────────────────────────────────────────────────
+
+  private async publishFacebookText(accountId: string, accessToken: string, text: string): Promise<PublishResult> {
     const res = await fetch(`${GRAPH_BASE}/${accountId}/feed`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         message: text,
+        access_token: accessToken,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+
+    return { success: true, platformPostId: data.id };
+  }
+
+  private async publishFacebookPhoto(accountId: string, accessToken: string, caption: string, imageUrl: string): Promise<PublishResult> {
+    const res = await fetch(`${GRAPH_BASE}/${accountId}/photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        url: imageUrl,
+        message: caption,
+        access_token: accessToken,
+      }),
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error.message);
+
+    return { success: true, platformPostId: data.id || data.post_id };
+  }
+
+  private async publishFacebookVideo(accountId: string, accessToken: string, caption: string, videoUrl: string): Promise<PublishResult> {
+    const res = await fetch(`${GRAPH_BASE}/${accountId}/videos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_url: videoUrl,
+        description: caption,
         access_token: accessToken,
       }),
     });

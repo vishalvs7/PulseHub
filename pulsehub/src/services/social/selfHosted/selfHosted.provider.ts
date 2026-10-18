@@ -102,27 +102,22 @@ export class SelfHostedProvider implements SocialProvider {
     userId: string,
     platform: CrossPostPlatform
   ): Promise<CallbackResult> {
-    const adapter = getMetaAdapter();
+    const adapter = (getAdapter(platform) || getMetaAdapter()) as any;
     const tokenBundle = await adapter.exchangeCode(code, redirectUri);
+
+    if (platform === 'threads') {
+      const accountId = tokenBundle.accountId || 'threads_user';
+      const username = tokenBundle.username || 'Threads User';
+      await this.storeAccount(userId, 'threads', username, accountId, tokenBundle.accessToken);
+      return { success: true, accountId, username, platform: 'threads' };
+    }
 
     // Get pages to find IG accounts
     const pages = await adapter.getPages(tokenBundle.accessToken);
 
     // Check if there are IG accounts to select from
-    const igAccounts = pages.filter((p) => p.igUserId);
+    const igAccounts = pages.filter((p: any) => p.igUserId);
     const fbPages = pages;
-
-    if (platform === 'threads') {
-      // For Threads, we need the IG user ID → threads user ID
-      // Threads uses the same IG token, and the threads user ID = IG user ID
-      const igAccount = igAccounts[0];
-      if (!igAccount) {
-        return { success: false, error: 'No Instagram account linked for Threads access' };
-      }
-
-      await this.storeAccount(userId, 'threads', igAccount.igUsername || igAccount.name, igAccount.igUserId!, tokenBundle.accessToken);
-      return { success: true, accountId: igAccount.igUserId, username: igAccount.igUsername || igAccount.name, platform: 'threads' };
-    }
 
     if (platform === 'instagram') {
       if (igAccounts.length > 1) {
@@ -131,7 +126,7 @@ export class SelfHostedProvider implements SocialProvider {
         return {
           success: true,
           needsSelection: true,
-          selectionOptions: igAccounts.map((ig) => ({
+          selectionOptions: igAccounts.map((ig: any) => ({
             id: ig.igUserId!,
             name: ig.name,
             username: ig.igUsername,
@@ -156,7 +151,7 @@ export class SelfHostedProvider implements SocialProvider {
         return {
           success: true,
           needsSelection: true,
-          selectionOptions: fbPages.map((p) => ({
+          selectionOptions: fbPages.map((p: any) => ({
             id: p.id,
             name: p.name,
           })),
@@ -286,14 +281,32 @@ export class SelfHostedProvider implements SocialProvider {
 
     // Resolve a human-readable name for the selection where possible
     let username = selectionId;
-    const adapter = getAdapter(request.platform);
-    if (adapter?.listConnectOptions) {
+    let storedToken = accessToken;
+
+    if (request.platform === 'facebook') {
       try {
-        const options = await adapter.listConnectOptions(accessToken);
-        const match = options.find((o) => o.id === selectionId);
-        if (match) username = match.name;
+        const meta = getMetaAdapter();
+        const pages = await meta.getPages(accessToken);
+        const selectedPage = pages.find((p) => p.id === selectionId);
+        if (selectedPage?.accessToken) {
+          storedToken = selectedPage.accessToken;
+        }
+        if (selectedPage?.name) {
+          username = selectedPage.name;
+        }
       } catch {
-        // Keep the raw ID as fallback
+        // Fall back to user token
+      }
+    } else {
+      const adapter = getAdapter(request.platform);
+      if (adapter?.listConnectOptions) {
+        try {
+          const options = await adapter.listConnectOptions(accessToken);
+          const match = options.find((o) => o.id === selectionId);
+          if (match) username = match.name;
+        } catch {
+          // Keep the raw ID as fallback
+        }
       }
     }
 
@@ -303,7 +316,7 @@ export class SelfHostedProvider implements SocialProvider {
       request.platform,
       username,
       selectionId,
-      accessToken,
+      storedToken,
       existing.refresh_token || undefined,
       existing.expires_at || null
     );

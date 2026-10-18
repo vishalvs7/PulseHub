@@ -1216,3 +1216,34 @@ Webhook registration: `POST /api/v1/webhooks { url: "https://...", events: ["pos
 | 12 | 1,500 | 150 | $7,350 |
 
 At scale (1,000 paid users × $49 avg) = **$49,000 MRR** = **$588K ARR**
+
+---
+
+## Next Steps: Self-Hosted Social Integration Roadmap
+
+### Current Status (Completed)
+- [x] Unified Self-Hosted Provider & Adapter Architecture implemented.
+- [x] Meta App (`2030863717615906`) configured for Facebook, Instagram Business Direct Login, and Threads.
+- [x] Credentials secured in `.env.local` (`META_*`, `INSTAGRAM_*`, `THREADS_*`, `LINKEDIN_*`).
+- [x] Live OAuth dialog and token exchange verified across Facebook, Instagram, Threads, and LinkedIn.
+- [x] Code review and bug fixes completed for YouTube, Pinterest, and Reddit adapters.
+
+### Immediate Action Items
+1. **End-to-End Self-Testing & Demo Screencast**
+   - Connect owner accounts for Facebook Page, Instagram Business, Threads, and LinkedIn.
+   - Publish live cross-posts to verify database persistence (`posts`, `post_targets`, `social_accounts`).
+   - Record a 2-minute video demonstrating OAuth authorization and post publishing (mandatory artifact for Meta App Review).
+
+2. **Meta App Review Submission (Going Live)**
+   - Complete Business Verification for Growphile Solutions in Meta Business Manager.
+   - Submit required permissions: `pages_manage_posts`, `pages_read_engagement`, `instagram_business_content_publish`, `threads_content_publish`.
+   - Once approved (24–72 hours), switch app toggle from **In Development** to **Live**.
+
+3. **Activate Pinterest, YouTube & Reddit**
+   - **Pinterest:** Obtain `PINTEREST_APP_ID` and `PINTEREST_APP_SECRET` from Pinterest Developers; set redirect URI to `https://postpilot.growphile.com/api/social/callback`.
+   - **YouTube:** Enable YouTube Data API v3 in Google Cloud Console; obtain `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; configure test users (up to 100 beta users without review).
+   - **Reddit:** Configure Reddit OAuth application; set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET`.
+
+4. **Public Launch & Monetization**
+   - Integrate payment gateway (Stripe) for premium tiers.
+   - Open registration to public users.

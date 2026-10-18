@@ -104,10 +104,14 @@ export class YouTubeAdapter implements PlatformAdapter {
     }
 
     try {
-      const head = await fetch(media.url, { method: 'HEAD' });
-      const contentType = head.headers.get('content-type') || 'video/mp4';
-      if (!contentType.startsWith('video/')) {
-        return { success: false, error: `Media is not a video (${contentType})` };
+      let contentType = 'video/mp4';
+      try {
+        const head = await fetch(media.url, { method: 'HEAD' });
+        if (head.ok) {
+          contentType = head.headers.get('content-type') || 'video/mp4';
+        }
+      } catch {
+        // Fall back to video/mp4
       }
 
       const mediaRes = await fetch(media.url);
@@ -190,11 +194,11 @@ export class YouTubeAdapter implements PlatformAdapter {
     limit = 25
   ): Promise<Array<{ id: string; text: string; timestamp: string; mediaType: string }>> {
     const data = await this.apiGet(
-      `/videos?part=snippet&mine=true&maxResults=${Math.min(limit, 50)}`,
+      `/search?part=snippet&forMine=true&type=video&maxResults=${Math.min(limit, 50)}`,
       accessToken
     );
     return (data.items || []).map((item: any) => ({
-      id: item.id,
+      id: typeof item.id === 'object' ? item.id.videoId : item.id,
       text: item.snippet?.title || '',
       timestamp: item.snippet?.publishedAt || '',
       mediaType: 'VIDEO',

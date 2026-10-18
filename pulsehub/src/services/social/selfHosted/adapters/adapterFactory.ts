@@ -17,7 +17,7 @@ export function getAdapter(platform: CrossPostPlatform): PlatformAdapter | null 
     case 'instagram':
     case 'facebook':
     case 'threads':
-      const meta = new MetaAdapter();
+      const meta = new MetaAdapter(platform as 'instagram' | 'facebook' | 'threads');
       if (meta.isConfigured()) adapter = meta;
       break;
     case 'linkedin':

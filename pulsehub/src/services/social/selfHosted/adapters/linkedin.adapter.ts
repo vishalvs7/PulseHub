@@ -28,13 +28,16 @@ export class LinkedInAdapter implements PlatformAdapter {
   // ─── OAuth ───────────────────────────────────────────────────────────────
 
   getAuthorizeUrl(redirectUri: string, state: string): string {
-    const scopes = ['w_member_social', 'openid', 'profile', 'w_organization_social'].join(' ');
+    const scopes = ['w_member_social', 'openid', 'profile'];
+    if (process.env.LINKEDIN_ORG_SCOPE === 'true') {
+      scopes.push('w_organization_social');
+    }
 
     const params = new URLSearchParams({
       client_id: this.clientId,
       redirect_uri: redirectUri,
       response_type: 'code',
-      scope: scopes,
+      scope: scopes.join(' '),
       state,
     });
 
