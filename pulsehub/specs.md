@@ -1223,10 +1223,52 @@ At scale (1,000 paid users × $49 avg) = **$49,000 MRR** = **$588K ARR**
 
 ### Current Status (Completed)
 - [x] Unified Self-Hosted Provider & Adapter Architecture implemented.
-- [x] Meta App (`2030863717615906`) configured for Facebook, Instagram Business Direct Login, and Threads.
-- [x] Credentials secured in `.env.local` (`META_*`, `INSTAGRAM_*`, `THREADS_*`, `LINKEDIN_*`).
-- [x] Live OAuth dialog and token exchange verified across Facebook, Instagram, Threads, and LinkedIn.
+- [x] Meta App (`2030863717615906`) configured for Facebook, Instagram Business Direct Login (`1815702609433475`), and Threads (`2603494136784989`).
+- [x] LinkedIn integration active (`77uuuf0gq3wp0e`).
+- [x] Pinterest App (`1626154`) active with App Secret, v5 token exchange patch, and board selection.
+- [x] YouTube Data API v3 active with Google OAuth Web Client ID & Secret; search endpoint patched.
 - [x] Code review and bug fixes completed for YouTube, Pinterest, and Reddit adapters.
+- [x] All 13 social credentials synced to Vercel production environment.
+- [x] Successfully deployed to production via Vercel CLI (`https://postpilot.growphile.com`).
+
+---
+
+## Recent Developments (October 18, 2026 — Self-Hosted Multi-Platform & Production Deploy)
+
+### 1. Platform Adapters & Architecture Upgrades
+* **Meta Multi-Platform Split (`meta.adapter.ts`):**
+  * Separate authorize URLs for **Threads** (`threads.net/oauth/authorize`), **Facebook Pages** (`facebook.com/dialog/oauth`), and **Instagram Direct Business Login** (`instagram.com/oauth/authorize` via `INSTAGRAM_APP_ID`).
+  * Platform-specific publishing: Facebook Page feed/photos/videos, Instagram media container workflow (`/media` + `/media_publish`), and Threads single-thread publishing.
+  * Resolved Page Access Token storage in `completeSelection()` so Facebook Page publishing authenticates with page-level tokens rather than user tokens.
+* **Pinterest v5 Overhaul (`pinterest.adapter.ts`):**
+  * Fixed token exchange endpoint from HTML web URL to official API v5 endpoint: `https://api.pinterest.com/v5/oauth/token`.
+  * Implemented `refreshToken()` method for 30-day continuous token rotation.
+  * Fixed Pin creation schema from `board` to `board_id`.
+* **YouTube Data API v3 Hardening (`youtube.adapter.ts`):**
+  * Replaced unsupported `/videos?part=snippet&mine=true` with official `/search?part=snippet&forMine=true&type=video` for channel video discovery.
+  * Added resilient fallback to `HEAD` content-type verification to prevent S3/CDN 403 errors during video upload.
+
+### 2. Live Credentials Active in `.env.local` & Vercel
+* `SOCIAL_PROVIDER=selfhosted`
+* `META_APP_ID=2030863717615906` / `META_APP_SECRET` (Postpilot Meta App)
+* `INSTAGRAM_APP_ID=1815702609433475` / `INSTAGRAM_APP_SECRET` (Direct IG Login)
+* `THREADS_APP_ID=2603494136784989` / `THREADS_APP_SECRET` (Direct Threads Login)
+* `LINKEDIN_CLIENT_ID=77uuuf0gq3wp0e` / `LINKEDIN_CLIENT_SECRET` (Growphile Solutions)
+* `PINTEREST_APP_ID=1626154` / `PINTEREST_APP_SECRET` (`@growphile` Pinterest Business)
+* `GOOGLE_CLIENT_ID=69622479975-nv9ddbci80a170hdcifckqd3jbtfh2kd.apps.googleusercontent.com` / `GOOGLE_CLIENT_SECRET` (YouTube API)
+
+### 3. Production Deployment (Vercel)
+* **Custom Domain:** `https://postpilot.growphile.com` (verified, live 200 OK).
+* **CLI Deployment:** Deployed via `npx vercel --prod --token ...` to bypass GitHub free-tier author email mismatch between `growphilebusiness@gmail.com` (Vercel) and `vs7361455@gmail.com` (GitHub).
+* **Git Commit:** `8d86c0b` pushed to `origin/main`.
+
+### 4. Known Testing Constraints & Edge Cases
+* **Google / YouTube Auth Block:** While in "Testing" mode, Google rejects logins from any account not listed under **Test users** on the OAuth consent screen with `Error 403: access_denied`. Only registered test emails can authenticate until full Google OAuth verification.
+* **Instagram Testers:** Direct Instagram login requires the Instagram account to accept an **Instagram Tester** invitation in Instagram Account Settings while the Meta app is in Development mode.
+* **Facebook Pages:** Only Facebook Pages where the Meta App administrator has admin privileges can be connected during development.
+* **Pinterest Board Dependency:** Every Pinterest Pin requires a target `board_id`; users must have at least one board created on Pinterest before connecting.
+
+---
 
 ### Immediate Action Items
 1. **End-to-End Self-Testing & Demo Screencast**
@@ -1239,11 +1281,6 @@ At scale (1,000 paid users × $49 avg) = **$49,000 MRR** = **$588K ARR**
    - Submit required permissions: `pages_manage_posts`, `pages_read_engagement`, `instagram_business_content_publish`, `threads_content_publish`.
    - Once approved (24–72 hours), switch app toggle from **In Development** to **Live**.
 
-3. **Activate Pinterest, YouTube & Reddit**
-   - **Pinterest:** Obtain `PINTEREST_APP_ID` and `PINTEREST_APP_SECRET` from Pinterest Developers; set redirect URI to `https://postpilot.growphile.com/api/social/callback`.
-   - **YouTube:** Enable YouTube Data API v3 in Google Cloud Console; obtain `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`; configure test users (up to 100 beta users without review).
-   - **Reddit:** Configure Reddit OAuth application; set `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET`.
-
-4. **Public Launch & Monetization**
+3. **Public Launch & Monetization**
    - Integrate payment gateway (Stripe) for premium tiers.
    - Open registration to public users.
