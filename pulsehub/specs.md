@@ -1284,3 +1284,43 @@ At scale (1,000 paid users × $49 avg) = **$49,000 MRR** = **$588K ARR**
 3. **Public Launch & Monetization**
    - Integrate payment gateway (Stripe) for premium tiers.
    - Open registration to public users.
+
+---
+
+## Unified Social API as a Service (B2B Developer Infrastructure)
+
+### Overview
+Expose PulseHub's self-hosted social media engine as a standalone, developer-facing Unified API (competitor to Zernio, Ayrshare, Blotato) enabling 3rd-party developers, marketing agencies, and automation builders to integrate social cross-posting via a single API key.
+
+### Target Personas & Use Cases
+1. **n8n / Make / Zapier Automation Builders:**
+   - Single HTTP Request node connects to Instagram, LinkedIn, Threads, Pinterest, and YouTube.
+   - Eliminates need for non-technical users to register Meta/Google Developer apps or verify domains.
+   - Opportunity to publish an official community node (`n8n-nodes-postpilot`) for zero-friction distribution.
+2. **AI Content Platforms & Auto-Bloggers:**
+   - AI tools (blog generators, video clippers, newsletter generators) publish directly to user socials via API.
+3. **Agencies & Multi-Client Brands:**
+   - Programmatically scheduling content across 50+ client accounts via one unified dashboard.
+4. **SaaS Platforms (Course creators, Podcasters, Event tools):**
+   - In-app "Share to Social" features powered without maintaining 6 separate OAuth integrations.
+
+### API Architecture & Planned Endpoints
+- **Base URL:** `https://postpilot.growphile.com/api/v1`
+- **Authentication:** `Authorization: Bearer pk_live_...`
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/v1/auth/connect-link` | Generate white-labeled OAuth connect URL for client end-users |
+| `GET` | `/api/v1/accounts` | List connected social accounts and active statuses |
+| `DELETE` | `/api/v1/accounts/:id` | Disconnect / revoke account access |
+| `POST` | `/api/v1/posts` | Cross-post to multiple platforms (text, images, video) in one call |
+| `GET` | `/api/v1/posts/:id` | Check publishing status and platform post URLs |
+| `GET` | `/api/v1/analytics` | Aggregate reach, views, engagement across connected accounts |
+
+### Implementation Scope (Next Session)
+1. **Database Schema:**
+   - `api_keys` (`id`, `user_id`, `key_hash`, `name`, `tier`, `monthly_quota`, `usage_count`, `created_at`)
+   - `api_usage_logs` (`id`, `api_key_id`, `endpoint`, `status_code`, `platforms_used`, `created_at`)
+2. **API Key Authentication Middleware:** `requireApiKey()` validating bearer token and enforcing monthly tier limits.
+3. **n8n Compatibility:** Standardized JSON error and success payloads matching automation platform conventions.
+4. **Interactive Documentation:** Public OpenAPI / Scalar documentation page at `/docs`.
